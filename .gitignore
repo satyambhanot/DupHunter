@@ -1,0 +1,33 @@
+# Data stays out of git (the Stack Overflow dump is about 69 GB)
+data/*
+!data/README.md
+*.7z
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+checkpoint/
+
+# LaTeX build files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
