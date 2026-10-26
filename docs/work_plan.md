@@ -33,15 +33,29 @@ Until the core works on Super User (W2), Navjot helps Iesrat test MinHash and LS
 
 ## 3. Dependencies
 
-```
-#3 download ─► #5 ETL ─┬─► #6 profiling ──► #16 SON ──► #17 blocking
-                       ├─► #7 shingles ─┬─► #8 MinHash ─► #9 LSH ─┐
-                       │                ├─► #10 exact ────────────┼─► #12 evaluation ─► #13 settings
-                       │                └─► #11 Spark LSH         │
-                       └─► #18 volume ─────────────────────────────┼─► #19 AI impact
-#4 cluster ────────────────────────────────────────────────────────┴─► #14 checkpoint ─► #15 scaling
-                                                                        #14 ─► #20 streaming ─► #21 sketches
-```
+Each issue lists what it depends on and what it blocks. Summary:
+
+| Issue | Needs first |
+|---|---|
+| #5 ETL | #3 download |
+| #6 profiling, #7 shingles, #18 volume | #5 ETL |
+| #8 MinHash | #7 |
+| #9 LSH | #8 |
+| #10 exact baseline | #6 (answer key), #7 |
+| #11 Spark MinHashLSH | #7, #10 (shared sample) |
+| #12 evaluation | #6, #9, #10 |
+| #13 LSH settings | #12 |
+| #14 core checkpoint | #4 cluster, #12, #13 |
+| #15 scaling | #4, #14 |
+| #16 SON | #6 |
+| #17 SON blocking | #14, #16 |
+| #19 AI impact on duplicates | #14, #18 |
+| #20 streaming check | #14 |
+| #21 DGIM and Flajolet-Martin | #20 |
+| #23 slides, #24 report | #14 |
+| #25 submission | #22, #23, #24 |
+
+**Critical path:** #3, #5, #7, #8, #9, #12, #13, #14, #15. Any delay here delays everything, so these get help first.
 
 ## 4. Guideline coverage
 
