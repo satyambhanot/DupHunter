@@ -1,43 +1,56 @@
 # DupHunter
 
-Finding duplicate questions on Stack Overflow and measuring the impact of AI tools on the site.
+Finding duplicate questions on Stack Overflow at scale with our own MinHash and LSH on a Spark cluster.
 
 ENSF 612: Engineering Large-Scale Data Analytics Systems, Fall 2026 (University of Calgary), Group 4.
 
 ## Research questions
 
-1. **Q1.** Can we find most of the known duplicate questions without comparing every pair?
-2. **Q2.** How much faster does the system run when we add more computers?
-3. **Q3.** Which tags often appear together, and who are the top experts for each tag?
-4. **Q4.** How did the number of new questions and duplicates change after AI tools became popular, and which topics changed the most?
+1. **Q1 (core).** How many known duplicates can our MinHash and LSH system find, and how close does it come to an exact search that checks every pair?
+2. **Q2 (core).** Do MinHash and LSH behave the way the course theory predicts on real questions, and which settings give the best balance between missed duplicates and wasted work?
+3. **Q3 (core).** What slows the system down as it grows (oversized buckets, data moved between machines, memory), and how does run time change with more executors, a second machine, and more data?
+4. **Q4.** Does grouping questions by frequent tag sets, found with SON, save work without losing many duplicates?
 
-The full plan is in the [project proposal](docs/proposal/ENSF612_Project_Proposal.pdf).
+The plan is in the [revised proposal](docs/proposal/ENSF612_Project_Proposal_v3.pdf) and the [work plan](docs/work_plan.md).
+
+## Experiments
+
+| Exp. | Stage | Owner | Issue |
+|---|---|---|---|
+| E1 | Text representation (shingles) | Iesrat | #27 |
+| E2 | MinHash signature length | Iesrat | #28 |
+| E3 | LSH settings and S-curve | Iesrat | #13 |
+| E4 | Checking and ranking candidates | Navjot | #29 |
+| E5 | Baselines: exact search, Spark `MinHashLSH` | Jubayer | #10, #11 |
+| E6 | SON tag blocking (secondary) | Jubayer | #16, #17 |
+| E7 | Big LSH buckets (skew) | Navjot | #30 |
+| E8 | Scaling: executors, machines, data size | Satyam | #15 |
 
 ## Team
 
-| Member | Module |
+| Member | Role |
 |---|---|
-| Satyam Bhanot | Data pipeline (ETL), Spark cluster setup, speed and scaling tests |
-| Iesrat Jahan | M1: Duplicate detection (shingling, MinHash, LSH) |
-| Md Jubayer Khan | M2: Tag combinations and expert ranking (SON, topic-sensitive PageRank) |
-| Navjot Singh Shienh | M3: Stream counting (Count-Min, DGIM, Flajolet-Martin) and M4: AI-impact analysis |
+| Satyam Bhanot | Data pipeline (ETL), Spark cluster, scaling study (E8) |
+| Iesrat Jahan | Text representation, MinHash, LSH and its settings (E1, E2, E3) |
+| Md Jubayer Khan | Answer key, evaluation, baselines, SON tag blocking (E5, E6) |
+| Navjot Singh Shienh | Checking and ranking candidates, big LSH buckets (E4, E7) |
 
 ## Repository layout
 
 ```
 DupHunter/
-├── docs/proposal/        Project proposal (PDF and LaTeX source)
+├── docs/                 Proposal and work plan
 ├── data/                 Raw and processed data (not tracked by git, see data/README.md)
 ├── src/
-│   ├── etl/              Stream the .7z dump, convert XML to Parquet
-│   ├── m1_duplicates/    Shingling, MinHash, LSH
-│   ├── m2_tags_experts/  SON frequent itemsets, topic-sensitive PageRank
-│   ├── m3_streams/       Count-Min Sketch, DGIM, Flajolet-Martin
-│   └── m4_ai_impact/     Before/after trend analysis
-├── scripts/              Helper scripts (data download, job runners)
+│   ├── etl/              Stream the .7z dump, XML to Parquet, dataset profile
+│   ├── similarity/       Shingles, MinHash, LSH (E1, E2, E3)
+│   ├── verification/     Exact check, ranking, big buckets (E4, E7)
+│   ├── evaluation/       Sample, exact baseline, Spark baseline, metrics (E5)
+│   └── blocking/         SON frequent tag sets, tag blocking (E6)
+├── scripts/              Data download, scaling runs (E8)
 ├── notebooks/            Exploration and plots
 ├── tests/                Unit tests
-└── results/              Figures and tables for the report
+└── results/              One folder per experiment (e1_representation, ..., e8_scaling)
 ```
 
 ## Getting started
