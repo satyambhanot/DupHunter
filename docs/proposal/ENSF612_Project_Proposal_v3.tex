@@ -86,7 +86,7 @@ settled by an experiment (E1 to E8 in Table~\ref{tab:exp}).
         between missed duplicates and wasted work?
   \item \textbf{(Core)} What slows the system down as it grows (oversized
         buckets, data moved between machines, memory), and how does run time
-        change with more executors, a second machine, and more data?
+        change with more cores, a second machine, and more data?
   \item Does grouping questions by frequent tag sets, found with SON, save work
         without losing many duplicates?
 \end{enumerate}
@@ -191,7 +191,7 @@ blocks separate, and break the text into short groups of words called
 \node[side, text width=3.6cm, minimum height=0.9cm] (s) at (6.5,-1.6) {\textbf{SON blocking (E6)}\\ group by frequent\\ tag sets};
 \draw[darr] (s.east) -| (e.south);
 \node[draw, rounded corners=2pt, fill=gray!10, font=\footnotesize, align=center, text width=5.0cm, minimum height=0.9cm] (z) at (14.3,-1.6)
-  {\textbf{Scaling (E8):} whole system on 1 to 8 executors, one or two laptops, 10\% to 100\% of data};
+  {\textbf{Scaling (E8):} whole system on 1 to 8 cores, one or two laptops, 10\% to 100\% of data};
 \end{tikzpicture}}
 \caption{DupHunter. Each stage is a design choice tested by the experiment named in it. The dashed box is the secondary part.}
 \label{fig:pipeline}
@@ -204,7 +204,7 @@ compare questions that share a bucket. We then check each candidate pair with
 its exact similarity and rank the candidates for each question. All of these
 are our own Spark code, written in the MapReduce style~\cite{dean2004}.
 
-\begin{table}[H]
+\begin{table}[!t]
 \centering
 \caption{Experiments. Each one settles a design choice or measures a cost.}
 \label{tab:exp}
@@ -229,18 +229,22 @@ E8 & Scaling & Table~\ref{tab:scale} & Run time, speedup, data moved, peak memor
 NDCG (how high the real duplicate is ranked), plus the reduction ratio (the
 share of pairs we never compare). We also break recall down by similarity,
 tag, question length, and year, to see where and why the system fails. For
-speed we record run time, speedup (how many times faster than one executor),
+speed we record run time, speedup (how many times faster than one core),
 data moved between machines, peak memory, and the time of the slowest task.
 Each scaling setting runs three times.
 
-\textbf{Compute setup.} We have two laptops, each with an Intel Core i7 and
-16\,GB of RAM, connected as a Spark standalone cluster~\cite{zaharia2012} on
-the same wired network. Laptop~A runs the master, the driver, and one worker;
-Laptop~B runs one worker. Each worker gives Spark about 8 cores and 10\,GB of
-memory. Spark does the work in \emph{executors}, its worker processes. Because
-we can start executors with one core each, the 1, 2, 4, and 8 worker tests run
-as real separate executors spread over the two laptops. MinHash signatures for
-2 million questions need only about 1\,GB. The laptops' GPUs are not needed.
+\textbf{Compute setup.} We have two laptops with 16\,GB of RAM each. Laptop~A
+has an Intel Core i7-13650HX (14 cores) and Laptop~B an AMD Ryzen~7 5800H
+(8 cores). Both run Windows, so Spark and HDFS run inside WSL2 (Linux on
+Windows). We connect them as a Spark standalone cluster~\cite{zaharia2012} on
+the same wired network: Laptop~A runs the master, the driver, and one worker;
+Laptop~B runs one worker. Each worker gives Spark 8 cores and about 8\,GB of
+memory (7\,GB on Laptop~B, which has 13.9\,GB usable). The data is stored in
+HDFS~\cite{hdfs} with a copy on each laptop, so every worker reads from its own
+disk. Spark runs tasks inside \emph{executors}, its worker processes. For the
+1, 2, 4, and 8 worker tests we give one executor 1, 2, 4, and then 8 cores,
+because each extra executor needs its own memory and eight would not fit in
+16\,GB. MinHash signatures for 2 million questions need only about 1\,GB.
 
 \begin{table}[H]
 \centering
@@ -251,8 +255,8 @@ as real separate executors spread over the two laptops. MinHash signatures for
 \toprule
 \textbf{Test} & \textbf{Setup} & \textbf{What it shows} \\
 \midrule
-A. More executors & 1, 2, 4, and 8 one-core executors; same data & Speedup, and how much of the work cannot run in parallel \\
-B. Second machine & 8 executors on one laptop vs.\ 4 + 4 on two; then 8 + 8 & The cost of sending data over the network \\
+A. More cores & 1, 2, 4, and 8 cores on Laptop~B, whose 8 cores are all the same; same data & Speedup, and how much of the work cannot run in parallel \\
+B. Second machine & 8 cores on A alone, on B alone, 4 + 4 on both, then 8 + 8 & The cost of the network, and how the slower laptop holds back the faster one \\
 C. More data & 10\%, 25\%, 50\%, and 100\% of the subset; all of Stack Overflow if time allows & How run time and memory grow with data size \\
 \bottomrule
 \end{tabularx}
@@ -266,8 +270,9 @@ Even after these cuts, every member still has core results.
 %% ==========================================================================
 \section{Algorithms and Techniques}
 
-We write the course algorithms ourselves and compare each one with an exact
-answer or a ready-made tool, so the report clearly shows which code is ours.
+We write the course algorithms ourselves. Exact search on a sample, Spark's
+\texttt{MinHashLSH}, and Spark's \texttt{FPGrowth} are used only for comparison,
+so the report clearly shows which code is ours.
 \begin{itemize}
   \item \textbf{Core, our own code:} shingling with removal of very common
         shingles (E1); MinHash~\cite{broder1997} (E2); LSH
@@ -278,8 +283,6 @@ answer or a ready-made tool, so the report clearly shows which code is ours.
         blocking (E6).
   \item \textbf{Stretch:} TF-IDF re-ranking~\cite{mmds} (E4), splitting big
         buckets over many tasks (E7), and the run on all of Stack Overflow (E8).
-  \item \textbf{Used only for comparison:} exact search of every pair on a
-        sample, Spark's \texttt{MinHashLSH}, and Spark's \texttt{FPGrowth}.
 \end{itemize}
 
 %% ==========================================================================
@@ -294,6 +297,7 @@ Missing duplicate labels & Treat precision as a lower bound; rely mainly on reca
 A few huge buckets (common phrases) make one task much slower & Measure the slowest task; compare a size limit with splitting buckets (E7) \\
 Choosing LSH settings & Compare measured results with theory on Super User first (E3) \\
 Moving data between laptops; 16\,GB of memory each & Wired network; process bands in batches; keep only needed columns \\
+Two different laptops (Intel and AMD) & Time each one alone first (test B), so the gap is measured, not hidden \\
 Blocking misses duplicates with different tags & Measure the recall lost compared with no blocking (E6) \\
 \bottomrule
 \end{tabularx}}
@@ -302,13 +306,12 @@ Blocking misses duplicates with different tags & Measure the recall lost compare
 \section{Expected Results}
 \begin{itemize}
   \item \textbf{Q1:} LSH will find most known duplicates while skipping more
-        than 99.9\% of all question pairs. Checking candidates with their exact
-        similarity will put the real duplicate higher in the list, and our
-        version will perform close to Spark's built-in one.
+        than 99.9\% of all pairs; exact checking will rank the real duplicate
+        higher, close to Spark's built-in version.
   \item \textbf{Q2:} the measured match rates will follow the theory closely,
         and 128 numbers per signature will be enough.
   \item \textbf{Q3:} MinHash will speed up almost in line with the number of
-        executors, because it needs no communication. LSH will speed up less,
+        cores, because it needs no communication. LSH will speed up less,
         because data must move between machines and a few big buckets slow it
         down; splitting those buckets will shorten the slowest task.
   \item \textbf{Q4:} tag blocking will cut run time and data moved, with a
@@ -361,6 +364,7 @@ Final report and code                         & All     &  &  &  &  & \g & \ms D
 \bibitem{broder1997} A.~Z.~Broder, ``On the resemblance and containment of documents,'' in \emph{Proc. Compression and Complexity of Sequences}, 1997.
 \bibitem{indyk1998} P.~Indyk and R.~Motwani, ``Approximate nearest neighbors: Towards removing the curse of dimensionality,'' in \emph{Proc. ACM STOC}, 1998.
 \bibitem{son1995} A.~Savasere, E.~Omiecinski, and S.~Navathe, ``An efficient algorithm for mining association rules in large databases,'' in \emph{Proc. VLDB}, 1995.
+\bibitem{hdfs} K.~Shvachko, H.~Kuang, S.~Radia, and R.~Chansler, ``The Hadoop distributed file system,'' in \emph{Proc. IEEE MSST}, 2010.
 \bibitem{kwon2012} Y.~Kwon, M.~Balazinska, B.~Howe, and J.~Rolia, ``SkewTune: Mitigating skew in MapReduce applications,'' in \emph{Proc. ACM SIGMOD}, 2012.
 \end{thebibliography}}
 \end{multicols}

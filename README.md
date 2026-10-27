@@ -8,7 +8,7 @@ ENSF 612: Engineering Large-Scale Data Analytics Systems, Fall 2026 (University 
 
 1. **Q1 (core).** How many known duplicates can our MinHash and LSH system find, and how close does it come to an exact search that checks every pair?
 2. **Q2 (core).** Do MinHash and LSH behave the way the course theory predicts on real questions, and which settings give the best balance between missed duplicates and wasted work?
-3. **Q3 (core).** What slows the system down as it grows (oversized buckets, data moved between machines, memory), and how does run time change with more executors, a second machine, and more data?
+3. **Q3 (core).** What slows the system down as it grows (oversized buckets, data moved between machines, memory), and how does run time change with more cores, a second machine, and more data?
 4. **Q4.** Does grouping questions by frequent tag sets, found with SON, save work without losing many duplicates?
 
 The plan is in the [revised proposal](docs/proposal/ENSF612_Project_Proposal_v3.pdf) and the [work plan](docs/work_plan.md).
@@ -24,7 +24,7 @@ The plan is in the [revised proposal](docs/proposal/ENSF612_Project_Proposal_v3.
 | E5 | Baselines: exact search, Spark `MinHashLSH` | Jubayer | #10, #11 |
 | E6 | SON tag blocking (secondary) | Jubayer | #16, #17 |
 | E7 | Big LSH buckets (skew) | Navjot | #30 |
-| E8 | Scaling: executors, machines, data size | Satyam | #15 |
+| E8 | Scaling: cores, machines, data size | Satyam | #15 |
 
 ## Team
 

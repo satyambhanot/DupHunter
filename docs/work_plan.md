@@ -19,7 +19,7 @@ This is the team's working plan, based on the [revised proposal (v3)](proposal/E
 | E5 | Baselines | Accuracy given up for time saved (exact search, Spark `MinHashLSH`) | Jubayer | #10, #11 |
 | E6 | Blocking | No blocking vs. single tags vs. SON tag sets | Jubayer | #16, #17 |
 | E7 | Big buckets | Size limit vs. dropping common shingles vs. splitting | Navjot | #30 |
-| E8 | Scaling | 1 to 8 executors, one or two laptops, 10% to 100% of data | Satyam | #15 |
+| E8 | Scaling | 1 to 8 cores, one or two laptops, 10% to 100% of data | Satyam | #15 |
 
 The evaluation script and error analysis (#12, Jubayer) are shared by every experiment.
 
