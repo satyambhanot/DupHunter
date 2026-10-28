@@ -31,3 +31,7 @@ checkpoint/
 .DS_Store
 .vscode/
 .idea/
+
+# Tools
+.ruff_cache/
+.pytest_cache/

@@ -37,7 +37,7 @@ The evaluation script (#12) and error analysis (#33) are Satyam's and are used b
 
 | Milestone | Due | Issues |
 |---|---|---|
-| W1: Data and cluster | Nov 1 | #2, #4, #5 |
+| W1: Data and cluster | Nov 1 | #2, #4, #5, #34 |
 | W2: Core on Super User | **Nov 8** | #3, #7, #8, #9, #12 |
 | Core checkpoint | Nov 13 | #6, #10, #11, #13, #14, #27, #28, #29, #31 |
 | Experiments and results freeze | Nov 20 | #15, #16, #17, #30, #32, #33 |
@@ -117,10 +117,10 @@ Every requirement in the guidelines has an issue that produces it.
 - Tick the checklist in the issue as you go. Move it to **Done** when the "Done when" line is true.
 - Blocked? Comment on the issue and mention the person you are waiting for.
 
-**Branches and pull requests**
-- Branch name: `issue-<number>-short-name`, for example `issue-9-lsh-banding`.
-- Open a pull request into `main` with `Closes #<number>` in the description.
-- One teammate reviews before merging.
+**Branches and pull requests** (full rules in [CONTRIBUTING.md](../CONTRIBUTING.md))
+- Work on a branch named `issue-<number>-short-name`, created from `dev`. Nobody pushes to `dev` or `main`.
+- Open a pull request into `dev` with `Closes #<number>`. The **Lint and test** check must pass and one teammate must approve.
+- Squash and merge into `dev`. At each milestone, a pull request merges `dev` into `main`.
 
 **Data and results**
 - Never commit data. `data/` is ignored by git.
@@ -133,7 +133,7 @@ Every requirement in the guidelines has an issue that produces it.
 ## 8. Definition of done
 
 A task is done when:
-1. The code is merged into `main` and runs from the instructions in its README.
+1. The pull request is merged into `dev` (CI green, one approval) and the code runs from the instructions in its README.
 2. Results are saved in `results/` with the settings used.
 3. The checklist in its issue is complete.
 4. Anything we did not write ourselves is marked as a library or external code.

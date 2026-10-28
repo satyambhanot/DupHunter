@@ -55,12 +55,17 @@ DupHunter/
 └── results/              One folder per experiment (e1_representation, ..., e8_scaling)
 ```
 
+## Contributing
+
+All changes go through pull requests into `dev`, and the linter must pass. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Getting started
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
+pre-commit install                     # runs the linter on every commit
 ./scripts/download_data.sh superuser   # small site (about 1.4 GB) for development
 ```
 
