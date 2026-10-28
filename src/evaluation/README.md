@@ -1,13 +1,11 @@
 # Evaluation and baselines
 
-**Owner:** Md Jubayer Khan (#10, #11, #12)
-
-| File | What it does | Experiment |
-|---|---|---|
-| `sample.py` | Builds the evaluation sample around labelled duplicate pairs | E5 (#10) |
-| `exact.py` | Exact all-pairs Jaccard on the sample (inverted index) | E5 (#10) |
-| `spark_baseline.py` | Spark's built-in `MinHashLSH` on the same data | E5 (#11) |
-| `evaluate.py` | Recall@K, Precision@K, MAP, NDCG, reduction ratio | all (#12) |
-| `errors.py` | Recall broken down by similarity, tag, question length, and year | error analysis (#12) |
+| File | Owner | What it does | Issue |
+|---|---|---|---|
+| `evaluate.py` | Satyam | Recall@K, Precision@K, MAP, NDCG, reduction ratio; per-pair output | #12 |
+| `errors.py` | Satyam | Recall broken down by similarity, tag, question length, and year | #33 |
+| `sample.py` | Navjot | Builds `python_sample_50k` around labelled duplicate pairs | #6 |
+| `exact.py` | Jubayer | Exact all-pairs Jaccard on the sample | #10 |
+| `spark_baseline.py` | Jubayer | Spark's built-in `MinHashLSH` on the same data | #11 |
 
 **Our code vs. libraries:** `spark_baseline.py` wraps Spark MLlib; everything else is our own code.

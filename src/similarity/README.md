@@ -1,6 +1,6 @@
 # Similarity: shingles, MinHash, LSH
 
-**Owner:** Iesrat Jahan (#7, #8, #9, #13, #27, #28)
+**Owner:** Iesrat Jahan (#7, #8, #9, #13, #27, #28). Navjot runs these scripts at full scale (#31).
 
 | File | What it does | Experiment |
 |---|---|---|

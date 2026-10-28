@@ -15,31 +15,33 @@ The plan is in the [revised proposal](docs/proposal/ENSF612_Project_Proposal_v3.
 
 ## Experiments
 
-| Exp. | Stage | Owner | Issue |
+| Exp. | Stage | Written by | Issue |
 |---|---|---|---|
 | E1 | Text representation (shingles) | Iesrat | #27 |
 | E2 | MinHash signature length | Iesrat | #28 |
 | E3 | LSH settings and S-curve | Iesrat | #13 |
 | E4 | Checking and ranking candidates | Navjot | #29 |
 | E5 | Baselines: exact search, Spark `MinHashLSH` | Jubayer | #10, #11 |
-| E6 | SON tag blocking (secondary) | Jubayer | #16, #17 |
+| E6 | SON tag blocking (secondary) | Satyam (SON), Jubayer (blocking) | #16, #17 |
 | E7 | Big LSH buckets (skew) | Navjot | #30 |
-| E8 | Scaling: cores, machines, data size | Satyam | #15 |
+| E8 | Scaling: cores, machines, data size | Satyam (scripts, analysis), Jubayer and Navjot (runs) | #15, #32 |
 
-## Team
+## Team and compute
+
+Jubayer's laptop (Intel i7-13650HX) and Navjot's (AMD Ryzen 7 5800H) form the Spark cluster and run everything at full scale. Satyam and Iesrat develop on Super User in local mode ([docs/dev_setup.md](docs/dev_setup.md)).
 
 | Member | Role |
 |---|---|
-| Satyam Bhanot | Data pipeline (ETL), Spark cluster, scaling study (E8) |
-| Iesrat Jahan | Text representation, MinHash, LSH and its settings (E1, E2, E3) |
-| Md Jubayer Khan | Answer key, evaluation, baselines, SON tag blocking (E5, E6) |
-| Navjot Singh Shienh | Checking and ranking candidates, big LSH buckets (E4, E7) |
+| Satyam Bhanot | ETL code, evaluation script, SON, scaling scripts and analysis, error analysis |
+| Iesrat Jahan | Shingles, MinHash, LSH and its settings (E1, E2, E3) |
+| Md Jubayer Khan | Cluster (Laptop A), Stack Overflow data, baselines (E5), tag blocking (E6), scaling runs |
+| Navjot Singh Shienh | Cluster (Laptop B), dataset profile, checking and ranking (E4), big buckets (E7), full-scale runs |
 
 ## Repository layout
 
 ```
 DupHunter/
-├── docs/                 Proposal and work plan
+├── docs/                 Proposal, work plan, dev and cluster setup
 ├── data/                 Raw and processed data (not tracked by git, see data/README.md)
 ├── src/
 │   ├── etl/              Stream the .7z dump, XML to Parquet, dataset profile
