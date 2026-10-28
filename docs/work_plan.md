@@ -37,7 +37,7 @@ The evaluation script (#12) and error analysis (#33) are Satyam's and are used b
 
 | Milestone | Due | Issues |
 |---|---|---|
-| W1: Data and cluster | Nov 1 | #2, #4, #5, #34 |
+| W1: Data and cluster | Nov 1 | #2, #4, #5, #35 |
 | W2: Core on Super User | **Nov 8** | #3, #7, #8, #9, #12 |
 | Core checkpoint | Nov 13 | #6, #10, #11, #13, #14, #27, #28, #29, #31 |
 | Experiments and results freeze | Nov 20 | #15, #16, #17, #30, #32, #33 |
