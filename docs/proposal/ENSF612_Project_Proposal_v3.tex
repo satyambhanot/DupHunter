@@ -118,8 +118,8 @@ CC~BY-SA~4.0 license.
 \textbf{Size and format.} The Stack Overflow archive is a single 64.2\,GiB
 (68.9\,GB) compressed file (\texttt{.7z}) covering July 2008 to September 2026.
 Inside, each table is an XML file with one record per line. We only need the
-columns in Table~\ref{tab:data} and skip every other table. Record counts are estimates from older
-releases; we will update them after loading the data.
+columns in Table~\ref{tab:data} and skip every other table. Post counts are live totals from the Stack
+Exchange API (October 28, 2026); the September dump is slightly smaller.
 
 \begin{table}[H]
 \centering
@@ -128,24 +128,23 @@ releases; we will update them after loading the data.
 \small
 \begin{tabularx}{\textwidth}{@{}l l Y Y@{}}
 \toprule
-\textbf{Table} & \textbf{Records (approx.)} & \textbf{Fields we keep} & \textbf{What we use it for} \\
+\textbf{Table} & \textbf{Records} & \textbf{Fields we keep} & \textbf{What we use it for} \\
 \midrule
-Posts     & 60 million (24 million questions) & id, type, title, body, tags, date & Question text, tags, and dates \\
-PostLinks & 10 million & post id, related post id, link type & Known duplicate pairs (our answer key) \\
+Posts     & 60.3 million (24.2 million questions) & id, type, title, body, tags, date & Question text, tags, and dates \\
+PostLinks & about 10 million (counted on loading) & post id, related post id, link type & Known duplicate pairs (our answer key) \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \textbf{How much data we will use.}
 \begin{itemize}
-  \item Our main runs use questions tagged \texttt{python} (roughly 2 million;
-        we will confirm the count). This is still large: 2 million questions
-        make about 2 trillion pairs. We only score duplicate pairs where both
+  \item Our main runs use the 2.2 million questions tagged \texttt{python}.
+        This is still large: they make about 2.4 trillion pairs. We only score duplicate pairs where both
         questions are in the subset.
   \item If time allows, we run the final system on all 24 million questions to
         see how it behaves on data more than ten times larger.
-  \item We build and debug everything on the Super User site first (1.4\,GB
-        compressed, same format, about 50 times smaller).
+  \item We build and debug everything on the Super User site first (517{,}000
+        questions, 1.4\,GB compressed, same format, about 47 times smaller).
 \end{itemize}
 
 \textbf{Data quality and limitations.}
@@ -245,7 +244,7 @@ HDFS~\cite{hdfs} with a copy on each laptop, so every worker reads from its own
 disk. Spark runs tasks inside \emph{executors}, its worker processes. For the
 1, 2, 4, and 8 worker tests we give one executor 1, 2, 4, and then 8 cores,
 because each extra executor needs its own memory and eight would not fit in
-16\,GB. MinHash signatures for 2 million questions need only about 1\,GB.
+16\,GB. MinHash signatures for 2.2 million questions need only about 1\,GB.
 
 \begin{table}[H]
 \centering
@@ -266,7 +265,9 @@ C. More data & 10\%, 25\%, 50\%, and 100\% of the subset; all of Stack Overflow 
 \textbf{Priority and cut order.} Q1 to Q3 must be finished. If time runs short,
 we cut, in this order: the run on all of Stack Overflow, splitting big buckets
 (we keep the simple size limit), TF-IDF re-ranking, and SON blocking (Q4).
-Even after these cuts, every member still has core results.
+Even after these cuts, every member still has core results. The experiments
+are cheaper than they look: E3, E6, and E7 rerun one pipeline with one setting
+changed, and E1 and E2 use only a few thousand pairs.
 
 %% ==========================================================================
 \section{Algorithms and Techniques}
@@ -295,11 +296,11 @@ so the report clearly shows which code is ours.
 \midrule
 Duplicates written in very different words & Measure it first (E1); report recall by similarity level \\
 Missing duplicate labels & Treat precision as a lower bound \\
-A few huge buckets (common phrases) make one task much slower & Measure the slowest task; compare a size limit with splitting buckets (E7) \\
-Moving data between laptops; 16\,GB of memory each & Wired network; process bands in batches; keep only needed columns \\
-Spark and HDFS on two Windows laptops (WSL2 networking) & Set up in the first week; test with a small job early; fall back to port forwarding \\
+Huge buckets (common phrases) slow one task & Measure the slowest task; compare a size limit with splitting buckets (E7) \\
+Network traffic; 16\,GB per laptop & Wired network; process bands in batches \\
+Spark and HDFS on Windows (WSL2) & Set up in the first week; test with a small job early; fall back to port forwarding \\
 Two different laptops (Intel and AMD) & Time each one alone first (test B) \\
-Blocking misses duplicates with different tags & Measure the recall lost compared with no blocking (E6) \\
+Blocking misses some duplicates & Measure the recall lost compared with no blocking (E6) \\
 \bottomrule
 \end{tabularx}}
 
@@ -311,10 +312,9 @@ Blocking misses duplicates with different tags & Measure the recall lost compare
         higher, close to Spark's built-in version.
   \item \textbf{Q2:} measured results will follow the theory closely; 128
         numbers per signature will be enough.
-  \item \textbf{Q3:} MinHash will speed up almost in line with the number of
-        cores, because it needs no communication. LSH will speed up less,
-        because data must move between machines and a few big buckets slow it
-        down; splitting those buckets will shorten the slowest task.
+  \item \textbf{Q3:} MinHash will speed up almost in line with the cores, as it
+        needs no communication. LSH will gain less, because data moves between
+        machines and big buckets slow it; splitting them will help.
   \item \textbf{Q4:} tag blocking will cut run time and data moved, with a
         small loss in recall.
 \end{itemize}
