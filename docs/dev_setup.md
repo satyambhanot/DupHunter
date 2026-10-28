@@ -9,7 +9,7 @@ Every script takes its **input paths, output paths, and Spark master as argument
 ## Setup
 
 1. Install Java 17 and Python 3.10 or newer.
-2. `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
+2. `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt`, then `pre-commit install` (the linter; see [CONTRIBUTING.md](../CONTRIBUTING.md))
 3. `./scripts/download_data.sh superuser` (1.4 GB). Satyam's ETL (#5) turns it into Parquet; the Super User Parquet is also shared on the team drive.
 4. On Windows, use WSL2 and keep the project **inside the WSL file system** (not under `/mnt/c`).
 

@@ -1,0 +1,4 @@
+# Tools for everyone who commits. Install once: pip install -r requirements-dev.txt
+ruff==0.17.3
+pytest==9.2.0
+pre-commit==4.7.0
