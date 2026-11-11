@@ -12,3 +12,30 @@ split by year to `data/parquet/`.
 - `profile.py` (#6, Navjot): dataset statistics and the answer key.
 
 Run on Super User first, then Stack Overflow.
+
+## Full Stack Overflow run
+
+The cluster wrapper verifies that `data/raw/stackoverflow.com.7z` is exactly
+68,929,051,847 bytes, then invokes `parse_posts.py` and `parse_links.py` with
+Spark. The posts run receives `--tag-filter python`; the ETL is responsible
+for writing all metadata and Python-only text beneath the output root. The
+links run writes the link table beneath that same root.
+
+From the WSL2 filesystem (not `/mnt/c`), preview the commands with:
+
+```bash
+bash scripts/cluster/run_etl_full.sh --dry-run
+```
+
+Run against the cluster by supplying its master and an HDFS output root:
+
+```bash
+bash scripts/cluster/run_etl_full.sh \
+  --master spark://<laptop-a-ip>:7077 \
+  --output hdfs:///data/stackoverflow
+```
+
+The wrapper expects the ETL scripts to accept `--archive`, `--output`,
+`--site`, and `--batch-size`; `parse_posts.py` also accepts `--tag-filter`.
+It prints the verified archive size and each ETL runtime, then reports the
+HDFS output size with `hdfs dfs -du -s`.
