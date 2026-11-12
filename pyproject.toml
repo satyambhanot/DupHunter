@@ -13,4 +13,5 @@ select = ["E", "F", "W", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-markers = ["slow: needs real data under data/raw (run by hand)"]
+addopts = "-m 'not slow'"
+markers = ["slow: needs real data under data/raw; run by hand with: pytest -m slow"]

@@ -1,0 +1,6 @@
+{
+  "seed": 0,
+  "sample_size": 50000,
+  "dup_pairs": 2000,
+  "random_pairs": 2000
+}
