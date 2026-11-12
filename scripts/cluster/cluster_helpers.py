@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from string import Template
-from typing import Mapping
 
 HADOOP_TEMPLATES = ("core-site.xml", "hdfs-site.xml")
 SPARK_TEMPLATES = ("spark-defaults.conf", "spark-env.sh")
