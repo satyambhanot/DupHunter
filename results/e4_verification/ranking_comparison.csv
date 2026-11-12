@@ -1,0 +1,3 @@
+method,n_queries,n_ranked,mean_score,top1_agreement_with_exact,mean_abs_rank_shift
+estimated,2780,13417,0.265423,0.823022,0.937854
+exact_jaccard,2780,13417,0.250672,1.0,0.0
