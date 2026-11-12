@@ -125,11 +125,7 @@ def _make_rdd(baskets: list[list[str]], num_slices: int = 2) -> Any:
     """Create a Spark RDD if PySpark/JVM is available, else use _PartitionedRDD."""
     try:
         builder = cast(SparkSession.Builder, SparkSession.builder)
-        spark = (
-            builder.master("local[2]")
-            .appName("DupHunter-TestSON")
-            .getOrCreate()
-        )
+        spark = builder.master("local[2]").appName("DupHunter-TestSON").getOrCreate()
         return spark.sparkContext.parallelize(baskets, numSlices=num_slices)
     except (ImportError, RuntimeError):
         return _PartitionedRDD.parallelize(baskets, num_slices=num_slices)
@@ -142,10 +138,7 @@ class TestSON:
         """Criterion 2 (Part A): SON over 2 partitions equals single-pass result."""
         rng = random.Random(42)
         vocab = ["python", "pandas", "numpy", "dataframe", "list", "dict", "matplotlib", "sql"]
-        baskets = [
-            rng.sample(vocab, k=rng.randint(2, 5))
-            for _ in range(100)
-        ]
+        baskets = [rng.sample(vocab, k=rng.randint(2, 5)) for _ in range(100)]
         support = 0.15
         min_count = math.ceil(support * len(baskets))
 
@@ -166,10 +159,7 @@ class TestSON:
         """Criterion 2 (Part B): Matches FPGrowth exactly on 100 random baskets."""
         rng = random.Random(16)
         tags = ["a", "b", "c", "d", "e", "f", "g", "h"]
-        baskets = [
-            sorted(rng.sample(tags, k=rng.randint(1, 5)))
-            for _ in range(100)
-        ]
+        baskets = [sorted(rng.sample(tags, k=rng.randint(1, 5))) for _ in range(100)]
         support = 0.10
 
         rdd = _make_rdd(baskets, num_slices=2)
@@ -183,16 +173,14 @@ class TestSON:
             fp = FPGrowth(itemsCol="items", minSupport=support)
             model = fp.fit(df)
             expected_results = {
-                frozenset(row["items"]): int(row["freq"])
-                for row in model.freqItemsets.collect()
+                frozenset(row["items"]): int(row["freq"]) for row in model.freqItemsets.collect()
             }
         except (ImportError, RuntimeError):
             min_count = math.ceil(support * len(baskets))
             freq_sets = apriori(baskets, min_count=min_count)
             basket_sets = [set(b) for b in baskets]
             expected_results = {
-                fs: sum(1 for b in basket_sets if fs.issubset(b))
-                for fs in freq_sets
+                fs: sum(1 for b in basket_sets if fs.issubset(b)) for fs in freq_sets
             }
 
         assert son_results == expected_results
@@ -239,25 +227,34 @@ class TestSONCLI:
 
     def test_parse_args_defaults_and_overrides(self) -> None:
         """Verify CLI arguments parse with expected defaults and overrides."""
-        args = parse_args([
-            "--input",
-            "data/python_tags",
-            "--output",
-            "results/e6_blocking/frequent_tagsets.csv",
-        ])
+        args = parse_args(
+            [
+                "--input",
+                "data/python_tags",
+                "--output",
+                "results/e6_blocking/frequent_tagsets.csv",
+            ]
+        )
         assert args.input == "data/python_tags"
         assert args.output == "results/e6_blocking/frequent_tagsets.csv"
         assert args.support == 0.01
         assert args.max_size is None
         assert args.master == "local[*]"
 
-        custom = parse_args([
-            "--input", "in.txt",
-            "--output", "out.csv",
-            "--support", "0.25",
-            "--max-size", "3",
-            "--master", "local[2]",
-        ])
+        custom = parse_args(
+            [
+                "--input",
+                "in.txt",
+                "--output",
+                "out.csv",
+                "--support",
+                "0.25",
+                "--max-size",
+                "3",
+                "--master",
+                "local[2]",
+            ]
+        )
         assert custom.support == 0.25
         assert custom.max_size == 3
         assert custom.master == "local[2]"

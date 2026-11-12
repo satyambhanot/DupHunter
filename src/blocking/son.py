@@ -280,9 +280,7 @@ def run_son(
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with out_file.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(
-            ["tagset", "size", "count", "support", "son_time_sec", "fpgrowth_time_sec"]
-        )
+        writer.writerow(["tagset", "size", "count", "support", "son_time_sec", "fpgrowth_time_sec"])
         for itemset, count in son_results:
             tagset_str = " ".join(sorted(itemset))
             sup_val = count / total_baskets if total_baskets > 0 else 0.0
@@ -316,8 +314,7 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         type=str,
         required=True,
         help=(
-            "Output CSV path for frequent tag sets "
-            "(e.g. results/e6_blocking/frequent_tagsets.csv)"
+            "Output CSV path for frequent tag sets (e.g. results/e6_blocking/frequent_tagsets.csv)"
         ),
     )
     parser.add_argument(
@@ -345,11 +342,7 @@ def main() -> None:
     """Entry point for running SON script from CLI."""
     args = parse_args()
     builder = cast(SparkSession.Builder, SparkSession.builder)
-    spark = (
-        builder.master(args.master)
-        .appName("DupHunter-SON-FrequentTagSets")
-        .getOrCreate()
-    )
+    spark = builder.master(args.master).appName("DupHunter-SON-FrequentTagSets").getOrCreate()
     try:
         run_son(
             spark=spark,
