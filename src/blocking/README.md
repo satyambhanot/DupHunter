@@ -8,3 +8,16 @@
 | `blocking.py` (Jubayer) | Assigns questions to tag groups and runs LSH inside each group | E6 (#17) |
 
 **Our code vs. libraries:** `son.py` is our own code; Spark `FPGrowth` is used only to check it.
+
+## Using SON (#16)
+
+```bash
+python -m src.blocking.son --input data/exports/superuser/python_tags \
+    --output results/e6_blocking/frequent_tagsets.csv --support 0.01 --master local[*]
+```
+
+## Tests
+
+```bash
+pytest tests/blocking
+```
