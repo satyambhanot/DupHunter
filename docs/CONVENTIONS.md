@@ -68,12 +68,12 @@ Definitions everyone uses: Recall@K counts the original among the first K ranked
 - After the results freeze (Fri Nov 20) no number changes.
 
 ### 6. Workflow
-- One issue is one branch and one pull request. Branch `issue-<n>-short-name` from the latest `dev`; never merge one issue's branch into another. If you must build on an unmerged pull request, say so in its description and merge in order.
-- Pull request into `dev`, short imperative title, template filled in, body contains `Closes #<n>` (`Part of #<n>` when the issue stays open afterwards, as for this one). Request the ring reviewer and assign yourself. The **Lint and test** check must be green. Squash and merge.
-- Review in a ring within 24 hours: WS1 reviews WS2, WS2 reviews WS3, WS3 reviews WS4, WS4 reviews WS1. The reviewer checks the issue's acceptance criteria and the file-ownership rule.
+- One issue is one branch and one pull request. Branch `ws<N>/<issue number>-short-name` from the latest `dev` (for example `ws2/9-lsh-banding`); never merge one issue's branch into another. If you must build on an unmerged pull request, say so in its description and merge in order.
+- Pull request into `dev`. The title starts with the issue ID, then a short imperative (`[#9] Add LSH banding`). Template filled in, body contains `Closes #<n>` (`Part of #<n>` when the issue stays open afterwards, as for this one). Request the ring reviewer and assign yourself. The **Lint and test** check must be green. Squash and merge.
+- Review in a ring within 24 hours: WS1 reviews WS2, WS2 reviews WS3, WS3 reviews WS4, WS4 reviews WS1. The reviewer checks the issue's acceptance criteria and the file-ownership rule, and ticks the criteria in the issue.
 - `dev` goes to `main` only at milestones, with a merge commit.
 - Pull requests stay under about 400 changed lines and touch only files you own. If one cohesive unit is larger, say so and why in the description.
-- Branch names: `issue-<n>-short-name` for every issue, including this one; `chore/short-name` only for work with no issue.
+- Branch names: `ws<N>/<issue number>-short-name` for every issue, including this one; `chore/short-name` only for work with no issue. Branches that were opened before this rule keep their names until they are merged.
 
 ### 7. Milestones (as on GitHub)
 W1 Data and cluster Nov 1 (overdue); W2 Core on Super User Nov 8; Core checkpoint Nov 13; Experiments and results freeze Nov 20; Presentation Nov 23; Final report and code Dec 4. A move of the checkpoint to Nov 18 is proposed and not yet agreed.
