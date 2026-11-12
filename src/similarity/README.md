@@ -9,6 +9,7 @@
 | `lsh.py` | LSH banding and candidate pairs, our own code | E3 (#13) |
 | `lsh_study.py` | S-curve theoretical vs. measured comparison, (b, r) parameter study | E3 (#13) |
 | `representation_study.py` | Exact-Jaccard comparison of text representations on labelled duplicate and random pairs; options in `configs/e1_representation.json` | E1 (#27) |
+| `minhash_study.py` | MinHash accuracy against `sqrt(J(1-J)/n)` and cost for signature lengths 32 to 256 | E2 (#28) |
 
 **Our code vs. libraries:** all four are our own code. Spark `MinHashLSH` is used only as a baseline (see `src/evaluation`).
 
@@ -131,4 +132,15 @@ title) are in [results/e1_representation/README.md](../../results/e1_representat
 ```bash
 python -m src.similarity.representation_study --pairs data/exports/superuser/pairs_e1 \
     --config configs/e1_representation.json --out results/e1_representation
+```
+
+## E2: signature length
+
+`minhash_study.py` compares the MinHash estimate with the exact Jaccard for n = 32, 64, 128 and 256 on labelled and
+synthetic pairs, and measures time, size and memory. The measured spread follows `sqrt(J(1-J)/n)`; the choice is n = 128.
+See [results/e2_signature/README.md](../../results/e2_signature/README.md).
+
+```bash
+python -m src.similarity.minhash_study --pairs data/exports/superuser/pairs_e1 \
+    --posts data/exports/superuser/python_sample --out results/e2_signature
 ```
