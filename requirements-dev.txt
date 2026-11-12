@@ -2,3 +2,4 @@
 ruff==0.17.3
 pytest==9.2.0
 pre-commit==4.7.0
+pypdf>=5,<8        # page count in scripts/check_submission.py
