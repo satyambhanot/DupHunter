@@ -35,7 +35,8 @@ def _by_hash(df: DataFrame, columns: list[str], seed: int) -> DataFrame:
 def export_python_tags(posts_meta: DataFrame, tag: str | None = PYTHON_TAG) -> DataFrame:
     """Return ``(post_id, tags)`` of every question tagged ``tag`` (all questions if empty).
 
-    Super User has no ``python`` tag; for development there, pass an empty tag to use all questions.
+    Super User has only 3,212 ``python`` questions, too few for the exports; for development there,
+    pass an empty tag to use all questions.
     """
     questions = posts_meta.filter(F.col("post_type") == 1)
     if tag:
@@ -141,7 +142,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--tag",
         default=PYTHON_TAG,
-        help="keep questions with this tag; empty keeps all (Super User has no python tag)",
+        help="keep questions with this tag; empty keeps all (Super User: only 3,212 python)",
     )
     parser.add_argument("--master", default="local[*]", help="Spark master")
     return parser.parse_args(argv)

@@ -74,8 +74,19 @@ python -m src.etl.exports --parquet-root data/parquet/superuser \
   questions are in `posts_text`, newer question first. Links with a missing question or equal timestamps are
   dropped; the counts are printed.
 - `exports.py` writes `python_tags`, `python_sample` and `pairs_e1` (deterministic, seed and sizes in
-  `configs/sample.json`). Super User has no `python` tag, so for development there add `--tag ""` to use all
-  questions. Share the files on the team drive; never commit them.
+  `configs/sample.json`). Super User has only 3,212 `python` questions, too few for the exports, so for
+  development there add `--tag ""` to use all questions. Share the files on the team drive; never commit them.
+
+## Results on Super User (release 2026-09-30)
+
+| Step | Result |
+|---|---|
+| `parse_posts` | 1,270,172 posts: 516,669 questions and 753,503 answers, 51 s for the whole archive |
+| `parse_links` | 90,843 links, 14,641 of them duplicate links (type 3), under 1 s |
+| answer key | 14,639 pairs kept; 849 links (5.8%) pointed from the older to the newer question and were swapped; 1 pair with equal timestamps dropped; none dropped for a missing question |
+| exports (`--tag ""`) | `python_tags` 516,669 questions; `python_sample` 50,000 questions including all 22,290 pair members; `pairs_e1` 2,000 duplicate and 2,000 random pairs |
+
+The full statistics are in [results/dataset_stats.md](../../results/dataset_stats.md). The Parquet is about 320 MB.
 
 ## Our code vs. libraries
 
