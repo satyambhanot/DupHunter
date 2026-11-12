@@ -1,0 +1,34 @@
+{
+  "experiment": "E3",
+  "name": "LSH band and row setting comparison",
+  "signature_length": 128,
+  "settings": [
+    {
+      "name": "high_precision",
+      "b": 16,
+      "r": 8,
+      "threshold": 0.7071067811865476,
+      "description": "Fewer bands, more rows per band; high precision, low candidate volume"
+    },
+    {
+      "name": "balanced",
+      "b": 32,
+      "r": 4,
+      "threshold": 0.42044820762685725,
+      "description": "Recommended setting: balances high recall with manageable candidates"
+    },
+    {
+      "name": "high_recall",
+      "b": 64,
+      "r": 2,
+      "threshold": 0.125,
+      "description": "More bands, fewer rows; aggressive recall, higher candidate volume"
+    }
+  ],
+  "chosen_setting": {
+    "b": 32,
+    "r": 4,
+    "threshold": 0.42044820762685725,
+    "rationale": "b=32, r=4 achieves an empirical detection rate >85% for moderately similar duplicates (s >= 0.5) while keeping candidate set size manageable without overwhelming cluster memory or verification stages."
+  }
+}
