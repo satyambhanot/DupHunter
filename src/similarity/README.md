@@ -48,4 +48,5 @@ signatures = build_signatures(
 
 An empty shingle set has `2,147,483,647` in every signature position; non-empty
 values are in `[0, 2,147,483,647)`. The seeded coefficient sequence is
-prefix-stable, so shorter signatures are prefixes of longer ones.
+prefix-stable, so shorter signatures are prefixes of longer ones. Only the
+`shingles` column is hashed; `code_shingles` is not used by MinHash.
