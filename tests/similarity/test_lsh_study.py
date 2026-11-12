@@ -16,7 +16,6 @@ from src.similarity.lsh_study import (
     simulate_lsh_retrieval,
 )
 
-
 # ---------------------------------------------------------------------------
 # Acceptance Criterion 1: S-Curve Formula & Invariants
 # ---------------------------------------------------------------------------
@@ -48,7 +47,7 @@ def test_s_curve_never_decreases():
         probs = [s_curve(s, b, r) for s in similarities]
         for i in range(len(probs) - 1):
             assert probs[i] <= probs[i + 1], (
-                f"Decreased from {probs[i]} to {probs[i+1]} at step {i} for b={b}, r={r}"
+                f"Decreased from {probs[i]} to {probs[i + 1]} at step {i} for b={b}, r={r}"
             )
 
 
@@ -175,11 +174,16 @@ def test_cli_parser():
     """Verify parse_args supports all arguments."""
     args = parse_args(
         [
-            "--config", "configs/e3_lsh.json",
-            "--output-dir", "results/e3_lsh",
-            "--samples", "15",
-            "--trials", "500",
-            "--seed", "123",
+            "--config",
+            "configs/e3_lsh.json",
+            "--output-dir",
+            "results/e3_lsh",
+            "--samples",
+            "15",
+            "--trials",
+            "500",
+            "--seed",
+            "123",
         ]
     )
     assert args.config == "configs/e3_lsh.json"
