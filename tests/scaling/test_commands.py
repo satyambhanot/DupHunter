@@ -99,3 +99,8 @@ def test_shell_wrapper_dry_run():
     )  # fmt: skip
     assert result.returncode == 0, result.stderr
     assert "spark-submit" in result.stdout
+
+
+def test_zero_runs_is_rejected():
+    with pytest.raises(SystemExit):
+        run_scaling.main(["--test", "A", "--runs", "0", "--dry-run"])

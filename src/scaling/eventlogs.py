@@ -117,8 +117,13 @@ def run_row(summary: dict) -> dict:
     return row
 
 
-def collect_runs(paths: Iterable[str | Path]) -> list[dict]:
-    """Parse every event log under the given files or directories, sorted by setting and run."""
+def collect_runs(paths: Iterable[str | Path], skipped: list[str] | None = None) -> list[dict]:
+    """Parse every E8 event log under the given files or directories, sorted by setting and run.
+
+    The cluster keeps the logs of every application, including test jobs that are not part of E8.
+    Logs whose application name is not an E8 name are left out; their file names are added to
+    ``skipped`` when a list is given. An unfinished E8 run raises an error naming its file.
+    """
     rows = []
     for path in map(Path, paths):
         files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
@@ -127,9 +132,14 @@ def collect_runs(paths: Iterable[str | Path]) -> list[dict]:
                 continue
             try:
                 with file.open() as handle:
-                    rows.append(run_row(parse_log(handle)))
+                    summary = parse_log(handle)
             except ValueError as error:
                 raise ValueError(f"{file}: {error}") from error
+            try:
+                rows.append(run_row(summary))
+            except ValueError:  # not an E8 application name
+                if skipped is not None:
+                    skipped.append(file.name)
     return sorted(rows, key=lambda r: (r["test"], r["cores"], r["fraction"], r["run"]))
 
 

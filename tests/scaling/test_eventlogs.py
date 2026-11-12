@@ -85,3 +85,13 @@ def test_unfinished_log_names_the_file(tmp_path):
     bad.write_text(FIXTURE.read_text().splitlines()[0] + "\n")
     with pytest.raises(ValueError, match="app-2.inprogress"):
         eventlogs.collect_runs([bad])
+
+
+def test_logs_of_other_applications_are_skipped_not_fatal(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "app-1").write_text(FIXTURE.read_text())
+    (logs / "app-other").write_text(FIXTURE.read_text().replace("e8_A_2_0.25_run1", "pi-test"))
+    skipped: list[str] = []
+    rows = eventlogs.collect_runs([logs], skipped)
+    assert len(rows) == 1 and skipped == ["app-other"]

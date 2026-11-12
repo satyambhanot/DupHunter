@@ -55,6 +55,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Print or run the commands; stop at the first failure."""
     args = parse_args(argv)
+    if args.runs < 1:
+        raise SystemExit("--runs must be at least 1")
     for command in commands_for(args):
         print(shlex.join(command))
         if not args.dry_run:

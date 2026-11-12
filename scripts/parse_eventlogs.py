@@ -25,9 +25,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--logs", nargs="+", required=True, help="event-log files or directories")
     parser.add_argument("--out", required=True, help="CSV file to write")
     args = parser.parse_args(argv)
-    rows = eventlogs.collect_runs(args.logs)
+    skipped: list[str] = []
+    rows = eventlogs.collect_runs(args.logs, skipped)
     eventlogs.write_runs(rows, args.out)
     print(f"{len(rows)} runs written to {args.out}", file=sys.stderr)
+    if skipped:
+        print(
+            f"skipped {len(skipped)} log(s) that are not E8 runs: {', '.join(skipped)}",
+            file=sys.stderr,
+        )
     return 0
 
 
