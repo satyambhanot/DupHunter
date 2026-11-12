@@ -93,7 +93,7 @@ ranking.
 
 \paragraph{Metrics.} We report Recall@$K$ for $K = 1, 5, 10$, Precision@10, mean average precision
 (MAP), NDCG@10 with one relevant item per question, and the reduction ratio
-$1 - c / \binom{n}{2}$, the share of all pairs that LSH did not have to consider ($c$ candidate pairs among
+$1 - c / (n(n-1)/2)$, the share of all pairs that LSH did not have to consider ($c$ candidate pairs among
 $n$ questions). Precision is a lower bound for the reason given above. Every run adds one row to a
 single table, \texttt{results/metrics.csv}, with its experiment, its settings and these values.
 
