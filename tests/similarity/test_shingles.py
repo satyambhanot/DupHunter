@@ -46,9 +46,7 @@ def test_word_shingles_clean_html_and_use_short_text_tokens(spark):
 
 def test_character_shingles_and_builder_registry(spark):
     assert set(SHINGLE_BUILDERS) == {"word", "character"}
-    frame = spark.sql(
-        "SELECT 1 AS post_id, '' AS title, 'abcdefg' AS body"
-    )
+    frame = spark.sql("SELECT 1 AS post_id, '' AS title, 'abcdefg' AS body")
 
     row = build_shingles(
         frame,
@@ -69,15 +67,11 @@ def test_code_and_pre_content_is_separate(spark):
 
     row = build_shingles(frame, ShingleConfig(k=1)).first()
     expected_text = build_shingles(
-        spark.sql(
-            "SELECT 1 AS post_id, 'Question' AS title, 'normal text' AS body"
-        ),
+        spark.sql("SELECT 1 AS post_id, 'Question' AS title, 'normal text' AS body"),
         ShingleConfig(k=1),
     ).first()
     expected_code = build_shingles(
-        spark.sql(
-            "SELECT 1 AS post_id, '' AS title, 'code sample x = 1' AS body"
-        ),
+        spark.sql("SELECT 1 AS post_id, '' AS title, 'code sample x = 1' AS body"),
         ShingleConfig(k=1),
     ).first()
 
@@ -99,14 +93,16 @@ def test_drop_common_share_removes_shingles_above_threshold(spark):
         ShingleConfig(k=1, drop_common_share=0.5),
     ).collect()
     full = build_shingles(frame, ShingleConfig(k=1)).collect()
-    common = build_shingles(
-        spark.sql("SELECT 1 AS post_id, '' AS title, 'shared' AS body"),
-        ShingleConfig(k=1),
-    ).first().shingles[0]
-
-    assert sum(len(row.shingles) for row in retained) < sum(
-        len(row.shingles) for row in full
+    common = (
+        build_shingles(
+            spark.sql("SELECT 1 AS post_id, '' AS title, 'shared' AS body"),
+            ShingleConfig(k=1),
+        )
+        .first()
+        .shingles[0]
     )
+
+    assert sum(len(row.shingles) for row in retained) < sum(len(row.shingles) for row in full)
     assert all(common not in row.shingles for row in retained)
     assert all(len(row.shingles) > 0 for row in retained)
 

@@ -1,10 +1,10 @@
 """Build deterministic Spark shingle sets from the C1 ``posts_text`` table."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
-from pyspark.sql import Column, DataFrame, functions as F
-
+from pyspark.sql import Column, DataFrame
+from pyspark.sql import functions as F
 
 _HASH_MODULUS = 2_147_483_647
 _CODE_BLOCKS = r"(?is)<(?:code|pre)\b[^>]*>(.*?)</(?:code|pre)\s*>"
@@ -29,9 +29,7 @@ class ShingleConfig:
             )
         if self.k < 1:
             raise ValueError("k must be at least 1")
-        if self.drop_common_share is not None and not (
-            0.0 <= self.drop_common_share <= 1.0
-        ):
+        if self.drop_common_share is not None and not (0.0 <= self.drop_common_share <= 1.0):
             raise ValueError("drop_common_share must be between 0 and 1")
 
 
@@ -116,15 +114,10 @@ def _drop_common_shingles(
     if total_posts == 0:
         return posts
 
-    exploded = (
-        posts.select(
-            F.col(post_id_col),
-            F.explode(
-                F.array_union(F.col("shingles"), F.col("code_shingles"))
-            ).alias("_shingle"),
-        )
-        .dropDuplicates([post_id_col, "_shingle"])
-    )
+    exploded = posts.select(
+        F.col(post_id_col),
+        F.explode(F.array_union(F.col("shingles"), F.col("code_shingles"))).alias("_shingle"),
+    ).dropDuplicates([post_id_col, "_shingle"])
     common = (
         exploded.groupBy("_shingle")
         .agg(F.countDistinct(post_id_col).alias("_post_count"))
@@ -132,29 +125,25 @@ def _drop_common_shingles(
         .agg(F.collect_set("_shingle").alias("_common_shingles"))
     )
 
-    return (
-        posts.crossJoin(common)
-        .select(
-            F.col(post_id_col),
-            F.filter(
-                F.col("shingles"),
-                lambda shingle: ~F.array_contains(
-                    F.col("_common_shingles"), shingle
-                ),
-            ).alias("shingles"),
-            F.filter(
-                F.col("code_shingles"),
-                lambda shingle: ~F.array_contains(
-                    F.col("_common_shingles"), shingle
-                ),
-            ).alias("code_shingles"),
-        )
+    return posts.crossJoin(common).select(
+        F.col(post_id_col),
+        F.filter(
+            F.col("shingles"),
+            lambda shingle: ~F.array_contains(F.col("_common_shingles"), shingle),
+        ).alias("shingles"),
+        F.filter(
+            F.col("code_shingles"),
+            lambda shingle: ~F.array_contains(F.col("_common_shingles"), shingle),
+        ).alias("code_shingles"),
     )
+
+
+DEFAULT_CONFIG = ShingleConfig()
 
 
 def build_shingles(
     posts_text: DataFrame,
-    config: ShingleConfig = ShingleConfig(),
+    config: ShingleConfig = DEFAULT_CONFIG,
     *,
     post_id_col: str = "post_id",
     title_col: str = "title",
@@ -185,9 +174,7 @@ def build_shingles(
             F.regexp_replace(body, _CODE_BLOCKS_WITH_TAGS, " "),
         )
     )
-    joined_code = F.trim(
-        F.regexp_replace(F.array_join(code_text, " "), _CODE_TAG, " ")
-    )
+    joined_code = F.trim(F.regexp_replace(F.array_join(code_text, " "), _CODE_TAG, " "))
 
     builder = SHINGLE_BUILDERS[config.representation]
     posts = posts_text.select(
