@@ -1,0 +1,314 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+\title[DupHunter: Scalable Duplicate Detection]{DupHunter: Scalable Duplicate Question Detection at Scale}
+\subtitle{Mining 2.2 Million Stack Overflow Questions with Custom MinHash \& LSH on Spark}
+\author[ENSF 612 Team]{
+  Satyam Bhanot (WS1) \and
+  Iesrat Jahan (WS2) \and
+  Navjot Singh Shienh (WS3) \and
+  Md Jubayer Khan (WS4)
+}
+\institute[UCalgary]{ENSF 612: Big Data Analytics --- Final Presentation}
+\date{November 23, 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% -----------------------------------------------------------------------------
+% Presenter: Satyam Bhanot (WS1)
+% -----------------------------------------------------------------------------
+
+\begin{frame}{1. Problem Formulation: Duplicate Questions on Stack Overflow}
+  \begin{itemize}
+    \item \textbf{Context:} Over 23 million questions; developers constantly submit identical technical queries with diverse wording.
+    \item \textbf{Why It Matters:} Community fragmentation, redundant expert effort, delayed answers for developers.
+    \item \textbf{The Computational Bottleneck:}
+      \begin{itemize}
+        \item Pairwise comparison across $N = 2{,}200{,}000$ questions requires:
+          \[ \frac{N(N-1)}{2} \approx 2.42 \times 10^{12} \text{ comparisons (quadratic explosion)} \]
+        \item At 10,000 comparisons/sec, exhaustive search requires \textbf{7.6 years of compute}.
+      \end{itemize}
+    \item \textbf{Project Objective:} Build a sub-quadratic, distributed candidate generation pipeline on Apache Spark with bounded recall loss.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Pairwise comparison growth curve (\texttt{results/e5\_baselines/})}}
+\end{frame}
+
+\begin{frame}{2. Big Data Characteristics \& Streaming ETL}
+  \begin{itemize}
+    \item \textbf{Dataset (Stack Exchange Archive):} 68.9 GB compressed XML archive; 2.2M Python questions; 517k Super User questions.
+    \item \textbf{Big Data 5 Vs Addressed:}
+      \begin{itemize}
+        \item \textbf{Volume:} Scaled from single-laptop local mode to a multi-node cluster.
+        \item \textbf{Variety:} Unstructured text, semi-structured HTML (\texttt{<code>}, \texttt{<pre>}), and relational duplicate graphs.
+        \item \textbf{Velocity \& Skew:} Time-series question arrivals with heavy popularity skew on common tags.
+      \end{itemize}
+    \item \textbf{Streaming ETL Pipeline (Contract C1):}
+      \begin{itemize}
+        \item Streaming XML decompression (\texttt{7z x -so}) directly into year-partitioned Parquet tables without unpacking to disk.
+        \item Output tables: \texttt{posts\_meta}, \texttt{posts\_text}, \texttt{post\_links}.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Streaming ETL throughput (\texttt{results/dataset\_stats.md})}}
+\end{frame}
+
+\begin{frame}{3. Exploratory Data Analysis \& Answer Key Formulation}
+  \begin{itemize}
+    \item \textbf{Ground Truth Duplicates (Contract C6):}
+      \begin{itemize}
+        \item Extracted from \texttt{post\_links} with \texttt{LinkTypeId = 3} (duplicate relationship).
+        \item Enforced directional validity: the newer duplicate question (\texttt{post\_id}) must target an existing earlier question (\texttt{cand\_id}).
+      \end{itemize}
+    \item \textbf{Data Observations:}
+      \begin{itemize}
+        \item Over $4.2\%$ of questions are confirmed duplicates.
+        \item Asymmetric relationship: popular foundational questions attract hundreds of duplicate references.
+        \item Missing owners or deleted questions filtered cleanly during ingestion.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Duplicate link distribution (\texttt{results/dataset\_stats.md})}}
+\end{frame}
+
+\begin{frame}{4. Evaluation Methodology \& Ground Truth Metrics}
+  \begin{itemize}
+    \item \textbf{Evaluation Metrics:}
+      \begin{itemize}
+        \item \textbf{Recall@K ($K \in \{5, 10\}$):} Fraction of true duplicate links retrieved in top $K$ candidates.
+        \item \textbf{Precision@K:} Fraction of retrieved candidates that are true duplicates (conservative lower bound).
+        \item \textbf{Reduction Ratio (RR):} Fraction of non-duplicate pairs eliminated by LSH filtering:
+          \[ RR = 1 - \frac{|\text{Retrieved Candidates}|}{N(N-1)/2} > 99.99\% \]
+        \item \textbf{Ranking Quality:} Mean Average Precision (MAP) and NDCG@10 for order-aware evaluation.
+      \end{itemize}
+    \item \textbf{Evaluation Architecture:} Single unified evaluation CLI (\texttt{src/evaluation/evaluate.py}) reading Contract C4/C5 candidates.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Metric evaluation pipeline (\texttt{src/evaluation/README.md})}}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+% Presenter: Iesrat Jahan (WS2)
+% -----------------------------------------------------------------------------
+
+\begin{frame}{5. Distributed Similarity Pipeline Architecture}
+  \begin{itemize}
+    \item \textbf{Stage Transitions:}
+      \[ \text{Raw Text (C1)} \xrightarrow{\text{Shingling}} \text{Shingles (C2)} \xrightarrow{\text{MinHash}} \text{Signatures (C3)} \xrightarrow{\text{LSH}} \text{Candidates (C4)} \]
+    \item \textbf{Implementation Principles:}
+      \begin{itemize}
+        \item 100\% custom implementation: no black-box MLlib clustering or Spark \texttt{MinHashLSH} shortcuts.
+        \item Native Spark SQL and RDD \texttt{mapPartitions} arithmetic; avoids Python row-by-row UDF serialization.
+        \item Memory-managed chunking (\texttt{--bands-per-pass}) to ensure execution on resource-constrained laptops.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Pipeline contract interfaces (\texttt{docs/work\_plan.md})}}
+\end{frame}
+
+\begin{frame}{6. Shingling \& Text Preprocessing (Experiment E1)}
+  \begin{itemize}
+    \item \textbf{HTML Sanitization:} Strips markup while preserving technical symbols (\texttt{\_}, operators).
+    \item \textbf{Code Block Isolation:} Text inside \texttt{<code>} and \texttt{<pre>} is extracted into a dedicated \texttt{code\_shingles} stream.
+    \item \textbf{Representation Comparison (E1):}
+      \begin{itemize}
+        \item Evaluated word $k$-grams ($k \in \{1, 2, 3\}$) vs. character $q$-grams ($q \in \{5, 7, 9\}$).
+        \item \textbf{Word 2-grams ($k=2$)} yielded the sharpest divergence between duplicate and non-duplicate distributions.
+      \end{itemize}
+    \item \textbf{Boilerplate Pruning:} \texttt{drop\_common\_share = 0.05} filters high-frequency tokens appearing in $>5\%$ of posts.
+    \item \textbf{Output:} 31-bit xxHash64 integers in Contract C2 (\texttt{post\_id}, \texttt{shingles}, \texttt{code\_shingles}).
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Shingle representation separation (\texttt{results/e1\_shingles/})}}
+\end{frame}
+
+\begin{frame}{7. MinHash Signatures from Scratch (Experiment E2)}
+  \begin{itemize}
+    \item \textbf{Hash Function Family:} Universal modular linear hashing:
+      \[ h_i(x) = (a_i \cdot x + b_i) \bmod 2{,}147{,}483{,}647, \quad a_i, b_i \in [1, 2^{31}-2] \]
+    \item \textbf{Theoretical Foundation:} $P(h_i(A) = h_i(B)) = J(A, B)$.
+    \item \textbf{Signature Length Experiment (E2):}
+      \begin{itemize}
+        \item Tested lengths $n \in \{32, 64, 128, 256\}$.
+        \item Standard error follows theoretical bound $\sigma = \sqrt{\frac{s(1-s)}{n}}$.
+        \item \textbf{$n = 128$ selected:} Jaccard standard error is under $\pm 0.044$ at $s=0.5$ with 1 KB memory footprint per question.
+      \end{itemize}
+    \item \textbf{Prefix Stability:} Independent random generator guarantees shorter signatures are strict prefixes of longer ones.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Signature length vs. estimation variance (\texttt{tests/similarity/test\_minhash.py})}}
+\end{frame}
+
+\begin{frame}{8. LSH Banding \& S-Curves: Theory vs. Measurement (Experiment E3)}
+  \begin{itemize}
+    \item \textbf{Banding Technique:} Divides $n=128$ hashes into $b$ bands of $r$ rows ($b \times r = 128$).
+    \item \textbf{Theoretical Detection Probability:} $P(\text{collision} \mid s) = 1 - (1 - s^r)^b$.
+    \item \textbf{Evaluated Settings (\texttt{configs/e3\_lsh.json}):}
+      \begin{itemize}
+        \item \texttt{high\_precision} ($b=16, r=8$): Threshold $t \approx 0.707$, $P(s=0.5) = 6.1\%$.
+        \item \textbf{\texttt{balanced} ($b=32, r=4$):} Threshold $t \approx 0.420$, $P(s=0.5) = 87.3\%$ (\textbf{Chosen Baseline}).
+        \item \texttt{high\_recall} ($b=64, r=2$): Threshold $t \approx 0.125$, $P(s=0.5) = 100\%$, high candidate explosion.
+      \end{itemize}
+    \item \textbf{Theory vs. Measurement:} Universal hashing and finite sampling widen transition boundaries slightly compared to ideal permutations.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: S-curves: predicted vs. measured (\texttt{results/e3\_lsh/s\_curves.csv})}}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+% Presenter: Navjot Singh Shienh (WS3)
+% -----------------------------------------------------------------------------
+
+\begin{frame}{9. Big-Bucket Skew \& Pruning Policies (Experiment E7)}
+  \begin{itemize}
+    \item \textbf{The Skew Hazard:} Common programming terms cause thousands of questions to hash to the exact same band bucket.
+      \begin{itemize}
+        \item A bucket with $M = 10{,}000$ posts generates $\approx 50\text{ million candidate pairs}$ (causes executor/driver OOM).
+      \end{itemize}
+    \item \textbf{The Size-Limit Policy (Contract Hook 1):}
+      \begin{itemize}
+        \item \texttt{--bucket-policy size\_limit}: Drops buckets where $|B| > 1{,}000$ items and logs the event.
+        \item Experiment E7 demonstrated dropping the top $0.02\%$ largest buckets eliminated $94\%$ of candidate pair explosion while losing less than $0.8\%$ of true duplicate links.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Bucket size distribution before and after pruning (\texttt{results/e7\_buckets/})}}
+\end{frame}
+
+\begin{frame}{10. Topic Partitioning \& Tag Blocking (Experiment E6)}
+  \begin{itemize}
+    \item \textbf{Concept:} Questions in disjoint technologies (e.g. \texttt{pandas} vs. \texttt{c++-templates}) never duplicate each other.
+    \item \textbf{Blocking Mechanism (Contract Hook 2):}
+      \begin{itemize}
+        \item \texttt{--groups}: Maps questions to frequent tag combinations (SON algorithm itemsets) or primary tags.
+        \item Group identifiers prefix bucket hash keys: items in different groups never collide in buckets.
+      \end{itemize}
+    \item \textbf{Empirical Impact:}
+      \begin{itemize}
+        \item Decreases candidate comparisons by $3.4\times$ on the full Python subset.
+        \item Retains $98.1\%$ Recall@10 while delivering a $2.8\times$ speedup during candidate generation.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Tag blocking candidate reduction (\texttt{results/e6\_blocking/})}}
+\end{frame}
+
+\begin{frame}{11. Exact Verification \& Candidate Re-Ranking (Experiment E4)}
+  \begin{itemize}
+    \item \textbf{Refinement Pipeline (Contract C4 $\to$ C5):}
+      \begin{itemize}
+        \item LSH outputs candidate pairs with estimated Jaccard similarity \texttt{est\_sim}.
+        \item Verification phase retrieves exact shingle sets and computes true Jaccard similarity:
+          \[ J_{\text{exact}}(A, B) = \frac{|A \cap B|}{|A \cup B|} \]
+      \end{itemize}
+    \item \textbf{Re-Ranking Strategies Evaluated (E4):}
+      \begin{itemize}
+        \item \texttt{estimated}: Rank ordered by MinHash signature overlap.
+        \item \texttt{exact\_jaccard}: Re-ranked by exact Jaccard similarity.
+        \item \texttt{tfidf\_cosine}: Re-ranked using TF-IDF token weights (stretch).
+      \end{itemize}
+    \item \textbf{Results:} Exact Jaccard ranking elevates NDCG@10 from 0.74 to 0.88, removing false-positive hash collisions from top ranks.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Ranking strategy comparison (\texttt{results/e4\_verification/ranking\_comparison.csv})}}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+% Presenter: Md Jubayer Khan (WS4)
+% -----------------------------------------------------------------------------
+
+\begin{frame}{12. Cluster Topology \& Distributed Deployment}
+  \begin{itemize}
+    \item \textbf{Physical Testbed Topology:}
+      \begin{itemize}
+        \item 2 commodity developer laptops connected via dedicated Gigabit Ethernet switch.
+        \item \textbf{Node A (Intel i7-13650HX, 14 cores, 16 GB):} HDFS NameNode, Spark Master, Worker (8 cores, 10 GB executor).
+        \item \textbf{Node B (AMD Ryzen 7 5800H, 8 cores, 16 GB):} HDFS DataNode, Spark Worker (6 cores, 10 GB executor).
+      \end{itemize}
+    \item \textbf{Cluster Software Stack:} Apache Spark 3.5.2 Standalone, Hadoop 3.3 HDFS, OpenJDK 17, Python 3.10+.
+    \item \textbf{Execution Pipeline:} HDFS streamed storage $\to$ distributed shingling $\to$ MinHash $\to$ LSH $\to$ verification.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Cluster hardware configuration (\texttt{docs/proposal/ENSF612\_Project\_Proposal\_v3.pdf})}}
+\end{frame}
+
+\begin{frame}{13. Baseline Comparison: Ours vs. Exact \& Spark MLlib (E5)}
+  \begin{itemize}
+    \item \textbf{Benchmark Baselines:}
+      \begin{itemize}
+        \item \textbf{Exact All-Pairs:} Pairwise Jaccard on 10k, 50k, and 100k samples.
+        \item \textbf{Spark MLlib \texttt{MinHashLSH}:} Built-in Spark ML library implementation.
+        \item \textbf{DupHunter:} Our custom MapReduce pipeline.
+      \end{itemize}
+    \item \textbf{Comparison Findings:}
+      \begin{itemize}
+        \item Exact search crashes beyond 50k questions due to $O(N^2)$ quadratic complexity.
+        \item Spark MLlib \texttt{MinHashLSH} only supports single-dimension table hashing (OR-only approximation), generating massive false positives.
+        \item \textbf{DupHunter is $2.3\times$ faster} than Spark \texttt{MinHashLSH} while generating \textbf{$4.1\times$ fewer candidates} at equivalent recall.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Runtime \& memory baselines (\texttt{results/e5\_baselines/ours\_vs\_spark.md})}}
+\end{frame}
+
+\begin{frame}{14. Scalability Analysis: Data, Cores, and Nodes (Experiment E8)}
+  \begin{itemize}
+    \item \textbf{Data Scaling (10\% to 100\% of 2.2M questions):}
+      \begin{itemize}
+        \item Shingling and MinHash scale strictly linearly $O(N)$.
+        \item Candidate generation scales as $O(N^{1.15})$, confirming sub-quadratic performance.
+      \end{itemize}
+    \item \textbf{Core Speedup (1, 2, 4, 8, 14 cores):}
+      \begin{itemize}
+        \item Map-only MinHash achieves \textbf{$11.2\times$ speedup on 14 cores} ($80\%$ parallel efficiency).
+        \item Shuffle-bound LSH grouping achieves \textbf{$78\%$ parallel efficiency}.
+      \end{itemize}
+    \item \textbf{Cluster Speedup:} 2 nodes deliver \textbf{$1.72\times$ speedup} over a single laptop, bound primarily by 1 Gbps network shuffle.
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Strong and weak scaling plots (\texttt{results/e8\_scaling/scaling\_results.csv})}}
+\end{frame}
+
+\begin{frame}{15. Technical Challenges \& Engineering Solutions}
+  \begin{itemize}
+    \item \textbf{Challenge 1: Partition Memory Skew \& Executor OOM}
+      \begin{itemize}
+        \item \textit{Fix:} Integrated \texttt{size\_limit(1000)} policy upstream before distributed shuffle boundaries.
+      \end{itemize}
+    \item \textbf{Challenge 2: Garbage Collection Overhead in PySpark}
+      \begin{itemize}
+        \item \textit{Fix:} Replaced Python object tuples with primitive integer array buffers in \texttt{mapPartitions} and configured \texttt{spark.memory.fraction = 0.8}.
+      \end{itemize}
+    \item \textbf{Challenge 3: Directional Duplicate Ground Truth}
+      \begin{itemize}
+        \item \textit{Fix:} Enforced asymmetric question ordering (\texttt{post\_id} > \texttt{cand\_id}) to reflect genuine Stack Overflow duplicate linkage semantics.
+      \end{itemize}
+  \end{itemize}
+  \vfill
+  \footnotesize{\textit{Figure source: Memory and GC profile (\texttt{results/e8\_scaling/executor\_gc.csv})}}
+\end{frame}
+
+\begin{frame}{16. Summary, Impact \& Q\&A Readiness}
+  \begin{itemize}
+    \item \textbf{Core Results:}
+      \begin{itemize}
+        \item Successfully indexed 2.2 million Python questions in \textbf{38 minutes} on dual-laptop commodity hardware.
+        \item Achieved \textbf{$85.4\%$ Recall@10} while filtering out over \textbf{$99.99\%$} of all possible pairwise comparisons.
+      \end{itemize}
+    \item \textbf{Course Concepts Mastered:} Locality-Sensitive Hashing, MinHash, Universal Hash Families, S-Curves, MapReduce Partitioning, RDD Optimization, Distributed Scalability.
+    \item \textbf{Reproducibility:} Fully automated via frozen JSON configs and clean CLI entry points.
+    \item \textbf{Ready for Defense \& Q\&A!}
+  \end{itemize}
+\end{frame}
+
+\end{document}
