@@ -84,18 +84,33 @@ pytest                                 # unit tests; they start a small local Sp
 Every script takes its input, output and Spark master as arguments (see [docs/dev_setup.md](docs/dev_setup.md)),
 and the settings of every experiment are in `configs/`. The stages, in order:
 
-1. **ETL.** Stream the archive into Parquet, one pass per table:
-   `python -m src.etl.parse_posts --archive data/raw/superuser.com.7z --site superuser --output data/parquet/superuser`
-   and the same with `python -m src.etl.parse_links`. Needs `7z` (`brew install p7zip` or `apt install p7zip-full`).
-   Then the profile, answer key and small exports as described in [src/etl/README.md](src/etl/README.md).
+1. **ETL.** Stream the archive into Parquet, one pass per table (needs `7z`: `brew install p7zip` or
+   `apt install p7zip-full`), then the dataset profile, the answer key and the small exports:
+   ```bash
+   python -m src.etl.parse_posts --archive data/raw/superuser.com.7z --site superuser --output data/parquet/superuser
+   python -m src.etl.parse_links --archive data/raw/superuser.com.7z --site superuser --output data/parquet/superuser
+   python -m src.etl.profile --parquet-root data/parquet/superuser --site "Super User" --output results/dataset_stats.md
+   python -m src.etl.answer_key --parquet-root data/parquet/superuser --output data/answer_key/superuser
+   python -m src.etl.exports --parquet-root data/parquet/superuser --answer-key data/answer_key/superuser \
+       --output data/exports/superuser --tag ""
+   ```
+   Details and the results of the Super User run are in [src/etl/README.md](src/etl/README.md).
 2. **Similarity.** Shingles, MinHash signatures and LSH candidates:
    `python -m src.similarity.lsh --input data/parquet/signatures --output data/parquet/candidates -b 16 -r 8`
    Shingles and MinHash are Python functions (`build_shingles`, `build_signatures`, see
    [src/similarity/README.md](src/similarity/README.md)) without a command line yet, so until WS2 adds one the
    signatures Parquet is written from Python; LSH then reads it as above.
-3. **Evaluation.** Candidates against the answer key, one row per run in `results/metrics.csv`, then the error
-   analysis: see [src/evaluation/README.md](src/evaluation/README.md).
-4. **Scaling.** Run on the cluster by the cluster owners: [src/scaling/README.md](src/scaling/README.md).
+3. **Evaluation.** Candidates against the answer key (one row per run in `results/metrics.csv`, plus the per-pair
+   table), then the error analysis:
+   ```bash
+   python -m src.evaluation.evaluate --candidates data/parquet/candidates --answer-key data/answer_key/superuser \
+       --experiment E3 --settings '{"b": 16, "r": 8}' --n-questions 516669 --per-pair-out data/per_pair
+   python -m src.evaluation.errors --per-pair data/per_pair --out results/error_analysis --bands 16 --rows 8
+   ```
+   See [src/evaluation/README.md](src/evaluation/README.md).
+4. **Scaling.** Run on the cluster by the cluster owners with `python -m src.scaling.run_scaling --test A --dry-run`
+   (or `scripts/run_scaling.sh`); the run table comes from `scripts/parse_eventlogs.py`:
+   [src/scaling/README.md](src/scaling/README.md).
 
 `python scripts/check_readme.py` checks that every `python -m src...` command in the READMEs exists and answers
 `--help`; the tests run it too. Each module README says which code is ours and which is a library.
