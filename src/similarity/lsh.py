@@ -3,7 +3,7 @@
 Stage C3 -> C4.  Input is a DataFrame with ``post_id`` and ``signature`` columns
 (output of ``minhash.build_signatures``), plus optional ``created`` and ``group``.
 Output is a DataFrame of candidate pairs matching Contract C4:
-    - ``post_id``: identifier of the newer question
+    - ``dup_id``: identifier of the newer question
     - ``cand_id``: identifier of the older candidate question
     - ``est_sim``: estimated Jaccard similarity in [0.0, 1.0]
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import logging
 import struct
 import sys
@@ -23,7 +24,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from pyspark.sql import DataFrame, SparkSession, Window, functions as F
+from pyspark.sql import DataFrame, SparkSession, Window
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     DoubleType,
@@ -64,9 +66,7 @@ class LSHConfig:
             raise ValueError(f"r must be at least 1, got {self.r}")
         expected_n = self.b * self.r
         if self.n is not None and self.n != expected_n:
-            raise ValueError(
-                f"b * r ({expected_n}) != n ({self.n})"
-            )
+            raise ValueError(f"b * r ({expected_n}) != n ({self.n})")
         if self.bands_per_pass is not None and self.bands_per_pass < 1:
             raise ValueError("bands_per_pass must be at least 1")
 
@@ -74,6 +74,9 @@ class LSHConfig:
     def total_hashes(self) -> int:
         """Total signature length (b * r)."""
         return self.b * self.r
+
+
+DEFAULT_CONFIG = LSHConfig()
 
 
 def s_curve(s: float, b: int, r: int) -> float:
@@ -89,7 +92,7 @@ def s_curve(s: float, b: int, r: int) -> float:
     """
     if not (0.0 <= s <= 1.0):
         raise ValueError(f"Similarity s must be between 0.0 and 1.0, got {s}")
-    return 1.0 - (1.0 - (s ** r)) ** b
+    return 1.0 - (1.0 - (s**r)) ** b
 
 
 def lsh_threshold(b: int, r: int) -> float:
@@ -103,7 +106,7 @@ def estimate_similarity(sig1: list[int], sig2: list[int]) -> float:
     """Compute fraction of matching signature positions between two signatures."""
     if len(sig1) != len(sig2) or len(sig1) == 0:
         return 0.0
-    matches = sum(1 for a, b in zip(sig1, sig2) if a == b)
+    matches = sum(1 for a, b in zip(sig1, sig2, strict=True) if a == b)
     return matches / len(sig1)
 
 
@@ -119,6 +122,7 @@ def size_limit(max_size: int = 1000) -> Callable[[DataFrame], DataFrame]:
     Returns a callable with signature (DataFrame) -> DataFrame preserving
     all input columns.
     """
+
     def policy(df: DataFrame) -> DataFrame:
         if df.rdd.isEmpty():
             return df
@@ -145,6 +149,33 @@ BUCKET_POLICIES: dict[str, Callable[..., Callable[[DataFrame], DataFrame]]] = {
 }
 
 
+def resolve_bucket_policy(name: str, bucket_limit: int = 1000) -> Callable[[DataFrame], DataFrame]:
+    """Turn a policy name into a bucket policy.
+
+    Args:
+        name: ``size_limit``, ``none``, or ``module:attr`` naming a policy callable
+            ``(DataFrame) -> DataFrame`` that other workstreams provide (contract hook 1).
+        bucket_limit: bucket size for ``size_limit``.
+
+    Raises:
+        ValueError: if the name is unknown or ``module:attr`` cannot be imported.
+    """
+    if name == "size_limit":
+        return size_limit(bucket_limit)
+    if name == "none":
+        return pass_through_policy
+    if ":" in name:
+        module_name, _, attribute = name.partition(":")
+        try:
+            policy = getattr(importlib.import_module(module_name), attribute)
+        except (ImportError, AttributeError) as error:
+            raise ValueError(f"Cannot load bucket policy {name!r}: {error}") from error
+        if not callable(policy):
+            raise ValueError(f"Bucket policy {name!r} is not callable")
+        return policy
+    raise ValueError(f"Unknown bucket policy name: {name}")
+
+
 # ---------------------------------------------------------------------------
 # Internal Helpers: Stable Hashing and Pair Generation
 # ---------------------------------------------------------------------------
@@ -164,9 +195,9 @@ def _expand_pairs_from_partition(
     """Generate ordered candidate pairs from grouped bucket members.
 
     Input rows are (band, bucket_key, members) where members is a list of
-    Row(id, created, signature).
+    Row(post_id, created, signature).
     Only earlier questions are candidates for newer questions.
-    Emits (post_id, cand_id, est_sim) with post_id (newer) and cand_id (older).
+    Emits (dup_id, cand_id, est_sim) with dup_id (newer) and cand_id (older).
     """
     for row in rows:
         members = row[2]
@@ -213,7 +244,7 @@ def _expand_pairs_from_partition(
 
 def find_candidates(
     signatures: DataFrame,
-    config: LSHConfig = LSHConfig(),
+    config: LSHConfig = DEFAULT_CONFIG,
     *,
     bucket_policy: Callable[[DataFrame], DataFrame] | str | None = None,
     groups: DataFrame | str | None = None,
@@ -238,7 +269,7 @@ def find_candidates(
 
     Returns:
         DataFrame matching Contract C4 with columns:
-            - ``post_id``: newer question ID
+            - ``dup_id``: newer question ID
             - ``cand_id``: older candidate question ID
             - ``est_sim``: estimated Jaccard similarity
 
@@ -264,19 +295,13 @@ def find_candidates(
     if bucket_policy is None:
         active_policy: Callable[[DataFrame], DataFrame] = size_limit(1000)
     elif isinstance(bucket_policy, str):
-        if bucket_policy == "none":
-            active_policy = pass_through_policy
-        elif bucket_policy == "size_limit":
-            active_policy = size_limit(1000)
-        else:
-            raise ValueError(f"Unknown bucket policy name: {bucket_policy}")
+        active_policy = resolve_bucket_policy(bucket_policy)
     elif callable(bucket_policy):
         active_policy = bucket_policy
     else:
         raise TypeError(f"Invalid bucket_policy type: {type(bucket_policy)}")
 
     # Resolve groups (Contract Hook 2)
-    has_groups = False
     if groups is not None:
         if isinstance(groups, str):
             groups_df = spark.read.parquet(groups)
@@ -297,13 +322,10 @@ def find_candidates(
             how="left",
         ).drop("_gid")
         df = df.withColumn("_group", F.coalesce(F.col("_group"), F.lit("other")))
-        has_groups = True
     elif "group" in signatures.columns:
         df = signatures.withColumn("_group", F.col("group"))
-        has_groups = True
     else:
         df = signatures.withColumn("_group", F.lit("default"))
-        has_groups = False
 
     has_created = created_col in signatures.columns
     if not has_created:
@@ -320,7 +342,7 @@ def find_candidates(
 
     c4_schema = StructType(
         [
-            StructField("post_id", id_field.dataType, nullable=False),
+            StructField("dup_id", id_field.dataType, nullable=False),
             StructField("cand_id", id_field.dataType, nullable=False),
             StructField("est_sim", DoubleType(), nullable=False),
         ]
@@ -346,9 +368,7 @@ def find_candidates(
                 grp = row["_group"]
 
                 if len(sig) != n_len:
-                    raise ValueError(
-                        f"Signature length {len(sig)} != expected b * r ({n_len})"
-                    )
+                    raise ValueError(f"Signature length {len(sig)} != expected b * r ({n_len})")
 
                 for band_idx in bands:
                     band_vals = sig[band_idx * b_rows : (band_idx + 1) * b_rows]
@@ -359,7 +379,7 @@ def find_candidates(
             [
                 StructField("band", LongType(), nullable=False),
                 StructField("bucket_key", StringType(), nullable=False),
-                StructField("id", id_field.dataType, nullable=False),
+                StructField("post_id", id_field.dataType, nullable=False),
                 StructField("created", df.schema["_created"].dataType, nullable=True),
                 StructField("signature", ArrayType(LongType()), nullable=False),
             ]
@@ -378,7 +398,7 @@ def find_candidates(
         grouped = filtered_bucket_df.groupBy("band", "bucket_key").agg(
             F.collect_list(
                 F.struct(
-                    F.col("id"),
+                    F.col("post_id"),
                     F.col("created"),
                     F.col("signature"),
                 )
@@ -399,7 +419,7 @@ def find_candidates(
     for next_df in all_pass_dfs[1:]:
         result = result.unionAll(next_df)
 
-    return result.dropDuplicates(["post_id", "cand_id"])
+    return result.dropDuplicates(["dup_id", "cand_id"])
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +484,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--bucket-policy",
         type=str,
         default="size_limit",
-        help="Bucket policy strategy: 'size_limit' or 'none'",
+        help="Bucket policy: 'size_limit', 'none' or 'module:attr' (a policy callable)",
     )
     parser.add_argument(
         "--bucket-limit",
@@ -489,11 +509,7 @@ def main(argv: list[str] | None = None) -> None:
         logger.info("DupHunter LSH module CLI ready. Use --help for usage.")
         return
 
-    spark = (
-        SparkSession.builder.master(args.master)
-        .appName("duphunter-lsh")
-        .getOrCreate()
-    )
+    spark = SparkSession.builder.master(args.master).appName("duphunter-lsh").getOrCreate()
 
     try:
         config = LSHConfig(
@@ -503,11 +519,7 @@ def main(argv: list[str] | None = None) -> None:
             bands_per_pass=args.bands_per_pass,
         )
 
-        policy = (
-            size_limit(args.bucket_limit)
-            if args.bucket_policy == "size_limit"
-            else pass_through_policy
-        )
+        policy = resolve_bucket_policy(args.bucket_policy, args.bucket_limit)
 
         signatures = spark.read.parquet(args.input)
         candidates = find_candidates(

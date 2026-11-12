@@ -66,7 +66,7 @@ print(f"S-curve threshold: {lsh_threshold(cfg.b, cfg.r):.3f}")
 print(f"P(detection | s=0.5): {s_curve(0.5, cfg.b, cfg.r):.4f}")
 
 candidates = find_candidates(signatures, cfg)
-# Returns Contract C4: post_id (newer), cand_id (older), est_sim (float)
+# Returns Contract C4: dup_id (newer), cand_id (older), est_sim (float)
 ```
 
 ### Plug-in Hooks (Contract Items 1 and 2)

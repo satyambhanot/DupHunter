@@ -103,7 +103,7 @@ def test_acceptance_criterion_1_core_example(spark: SparkSession):
     assert len(rows) == 1
     pair = rows[0]
     # newer is id2 (post_id=2), older is id1 (cand_id=1)
-    assert pair.post_id == 2
+    assert pair.dup_id == 2
     assert pair.cand_id == 1
     assert pair.est_sim == pytest.approx(0.5)
 
@@ -129,7 +129,7 @@ def test_pair_meeting_in_several_bands_appears_once(spark: SparkSession):
     rows = candidates.collect()
 
     assert len(rows) == 1
-    assert rows[0].post_id == 2
+    assert rows[0].dup_id == 2
     assert rows[0].cand_id == 1
     assert rows[0].est_sim == pytest.approx(1.0)
 
@@ -153,7 +153,7 @@ def test_only_earlier_questions_are_candidates_with_timestamp(spark: SparkSessio
     df = spark.createDataFrame(
         [
             (100, 1000, [1, 2, 3, 4]),  # post_id 100 created at time 1000 (newer)
-            (200, 500, [1, 2, 3, 4]),   # post_id 200 created at time 500 (older)
+            (200, 500, [1, 2, 3, 4]),  # post_id 200 created at time 500 (older)
         ],
         ["post_id", "created", "signature"],
     )
@@ -164,7 +164,7 @@ def test_only_earlier_questions_are_candidates_with_timestamp(spark: SparkSessio
 
     assert len(rows) == 1
     # post_id 100 is newer (created=1000), cand_id 200 is older (created=500)
-    assert rows[0].post_id == 100
+    assert rows[0].dup_id == 100
     assert rows[0].cand_id == 200
 
 
@@ -286,12 +286,16 @@ def test_bands_per_pass_identical_output(spark: SparkSession):
     )
 
     config = LSHConfig(b=2, r=2)
-    res_pass1 = find_candidates(df, config=config, bands_per_pass=1).orderBy("post_id", "cand_id").collect()
-    res_pass2 = find_candidates(df, config=config, bands_per_pass=2).orderBy("post_id", "cand_id").collect()
+    res_pass1 = (
+        find_candidates(df, config=config, bands_per_pass=1).orderBy("dup_id", "cand_id").collect()
+    )
+    res_pass2 = (
+        find_candidates(df, config=config, bands_per_pass=2).orderBy("dup_id", "cand_id").collect()
+    )
 
     assert len(res_pass1) == len(res_pass2)
-    assert [(r.post_id, r.cand_id, r.est_sim) for r in res_pass1] == [
-        (r.post_id, r.cand_id, r.est_sim) for r in res_pass2
+    assert [(r.dup_id, r.cand_id, r.est_sim) for r in res_pass1] == [
+        (r.dup_id, r.cand_id, r.est_sim) for r in res_pass2
     ]
 
 
@@ -311,7 +315,7 @@ def test_signature_length_mismatch_raises_value_error(spark: SparkSession):
 
 
 def test_contract_c4_schema(spark: SparkSession):
-    """Output matches contract C4 columns: post_id, cand_id, est_sim."""
+    """Output matches contract C4 columns: dup_id, cand_id, est_sim."""
     df = spark.createDataFrame(
         [
             (1, [1, 2, 3, 4]),
@@ -322,21 +326,29 @@ def test_contract_c4_schema(spark: SparkSession):
 
     config = LSHConfig(b=2, r=2)
     candidates = find_candidates(df, config=config)
-    assert candidates.columns == ["post_id", "cand_id", "est_sim"]
+    assert candidates.columns == ["dup_id", "cand_id", "est_sim"]
 
 
 def test_cli_help():
     """Verify parse_args supports all required CLI flags."""
     args = parse_args(
         [
-            "--input", "in.parquet",
-            "--output", "out.parquet",
-            "-b", "32",
-            "-r", "4",
-            "--bands-per-pass", "2",
-            "--bucket-policy", "size_limit",
-            "--bucket-limit", "500",
-            "--groups", "groups.parquet",
+            "--input",
+            "in.parquet",
+            "--output",
+            "out.parquet",
+            "-b",
+            "32",
+            "-r",
+            "4",
+            "--bands-per-pass",
+            "2",
+            "--bucket-policy",
+            "size_limit",
+            "--bucket-limit",
+            "500",
+            "--groups",
+            "groups.parquet",
         ]
     )
     assert args.input == "in.parquet"
@@ -347,3 +359,29 @@ def test_cli_help():
     assert args.bucket_policy == "size_limit"
     assert args.bucket_limit == 500
     assert args.groups == "groups.parquet"
+
+
+def test_resolve_bucket_policy_names_and_module_attr():
+    from src.similarity.lsh import pass_through_policy, resolve_bucket_policy
+
+    assert resolve_bucket_policy("none") is pass_through_policy
+    assert callable(resolve_bucket_policy("size_limit", 5))
+    # module:attr loads a policy provided by another workstream
+    assert resolve_bucket_policy("src.similarity.lsh:pass_through_policy") is pass_through_policy
+    with pytest.raises(ValueError, match="Unknown bucket policy"):
+        resolve_bucket_policy("nonsense")
+    with pytest.raises(ValueError, match="Cannot load bucket policy"):
+        resolve_bucket_policy("src.similarity.lsh:does_not_exist")
+    with pytest.raises(ValueError, match="Cannot load bucket policy"):
+        resolve_bucket_policy("no_such_module:policy")
+
+
+def test_candidates_accept_a_module_attr_policy_name(spark):
+    df = spark.createDataFrame(
+        [(1, [1, 2, 3, 4]), (2, [1, 2, 9, 9])],
+        ["post_id", "signature"],
+    )
+    rows = find_candidates(
+        df, config=LSHConfig(b=2, r=2), bucket_policy="src.similarity.lsh:pass_through_policy"
+    ).collect()
+    assert [(r.dup_id, r.cand_id) for r in rows] == [(2, 1)]
