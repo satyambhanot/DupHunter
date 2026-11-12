@@ -115,24 +115,30 @@ def run_etl(
     posts_script = project_root / "src" / "etl" / "parse_posts.py"
     links_script = project_root / "src" / "etl" / "parse_links.py"
 
-    commands = [
-        build_etl_command(
-            "src.etl.parse_posts",
-            archive_path,
-            output_path,
-            batch_size,
-            tag_filter="python",
+    stages = [
+        (
+            "parse_posts",
+            build_etl_command(
+                "src.etl.parse_posts",
+                archive_path,
+                output_path,
+                batch_size,
+                tag_filter="python",
+            ),
         ),
-        build_etl_command(
-            "src.etl.parse_links",
-            archive_path,
-            output_path,
-            batch_size,
+        (
+            "parse_links",
+            build_etl_command(
+                "src.etl.parse_links",
+                archive_path,
+                output_path,
+                batch_size,
+            ),
         ),
     ]
 
     if dry_run:
-        for command in commands:
+        for _, command in stages:
             print(shlex.join(command))
         return
 
@@ -143,12 +149,11 @@ def run_etl(
         names = ", ".join(str(script) for script in missing_scripts)
         raise FileNotFoundError(f"Required ETL script(s) are missing: {names}")
 
-    for command in commands:
+    for name, command in stages:
         started = time.perf_counter()
         subprocess.run(command, check=True, cwd=project_root)
         elapsed = time.perf_counter() - started
-        module_name = command[2].rsplit(".", maxsplit=1)[-1]
-        print(f"Completed {module_name} in {elapsed:.2f} seconds")
+        print(f"Completed {name} in {elapsed:.2f} seconds")
 
     subprocess.run(["hdfs", "dfs", "-du", "-s", output_path], check=True)
 
