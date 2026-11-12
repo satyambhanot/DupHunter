@@ -29,3 +29,19 @@ python -m src.evaluation.evaluate --candidates data/candidates --answer-key data
 - **Ranks deeper than `--max-rank` (default 100) are ignored**; they change MAP only slightly.
 - A new metric is one entry in `METRICS` in `metrics.py`; nothing else changes.
 - Other workstreams call it through this command line, never by importing it.
+
+## Error analysis (#33)
+
+`errors.py` reads the per-pair table (C8) written by `evaluate.py --per-pair-out` and answers where the
+system misses duplicates. A pair is a *hit* when its original is within the first `k` candidates (default 10).
+
+```bash
+python -m src.evaluation.errors --per-pair data/per_pair --out results/error_analysis --bands 32 --rows 4
+```
+
+It writes `recall_by_similarity`, `recall_by_tags` (top 20 tags, a pair counts once per tag),
+`recall_by_length` and `recall_by_year` as CSV and PNG, plus `misses.csv` with the first 20 misses to read by
+eye. Every bin shows its pair count; bins with fewer than 20 pairs are flagged `low_n` (grey bars). With
+`--bands` and `--rows` the similarity plot also draws the LSH theory `1 - (1 - s^r)^b`: misses at low
+similarity are expected, misses at high similarity are not. Needs pandas, pyarrow and matplotlib.
+||||||| 558e3d9
