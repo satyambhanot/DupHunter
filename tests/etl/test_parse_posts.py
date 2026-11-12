@@ -93,7 +93,7 @@ def test_question_answer_split(tmp_path):
 
 def test_posts_text_keeps_title_body_and_html(tmp_path):
     parse_posts.write_posts(_posts(), str(tmp_path))
-    row = next(r for r in _read(tmp_path, "posts_text") if r["id"] == 1)
+    row = next(r for r in _read(tmp_path, "posts_text") if r["post_id"] == 1)
     assert row["title"] == "Sort a list"
     assert row["body"] == "<p>How?</p>"
     assert row["tags"] == ["python", "list"]
