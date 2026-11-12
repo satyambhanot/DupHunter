@@ -12,7 +12,6 @@ from pathlib import Path
 
 EXPECTED_ARCHIVE_SIZE = 68_929_051_847
 DEFAULT_BATCH_SIZE = 50_000
-DEFAULT_MASTER = "spark://localhost:7077"
 DEFAULT_OUTPUT = "hdfs:///data/stackoverflow"
 
 
@@ -47,20 +46,18 @@ def verify_archive(
 
 
 def build_etl_command(
-    script_path: str | Path,
+    module_name: str,
     archive_path: str | Path,
     output_path: str,
-    master: str,
     batch_size: int = DEFAULT_BATCH_SIZE,
     tag_filter: str | None = None,
 ) -> list[str]:
-    """Construct the spark-submit CLI argument list for an ETL stage.
+    """Build a Python module command for one ETL stage.
 
     Args:
-        script_path: Path to the Python ETL script (parse_posts.py or parse_links.py).
+        module_name: Importable ETL module, such as ``src.etl.parse_posts``.
         archive_path: Path to the source .7z archive file.
         output_path: Target directory (local or HDFS URI).
-        master: Spark master URL (e.g., 'spark://host:7077').
         batch_size: Number of records to stream per batch.
         tag_filter: Optional tag filter (e.g., 'python' for posts).
 
@@ -72,16 +69,15 @@ def build_etl_command(
     """
     if batch_size < 1:
         raise ValueError("batch_size must be greater than zero")
-    if not master:
-        raise ValueError("master must not be empty")
+    if not module_name:
+        raise ValueError("module_name must not be empty")
     if not output_path:
         raise ValueError("output_path must not be empty")
 
     command = [
-        "spark-submit",
-        "--master",
-        master,
-        str(script_path),
+        sys.executable,
+        "-m",
+        module_name,
         "--archive",
         str(archive_path),
         "--output",
@@ -100,17 +96,15 @@ def run_etl(
     project_root: Path,
     archive_path: Path,
     output_path: str,
-    master: str,
     batch_size: int,
     dry_run: bool,
 ) -> None:
-    """Execute or preview the complete posts and links ETL pipeline.
+    """Run or preview the posts and links ETL pipeline.
 
     Args:
         project_root: Path to the repository root directory.
         archive_path: Path to the 7z archive.
         output_path: HDFS destination URI.
-        master: Spark master connection string.
         batch_size: Number of rows per streaming batch.
         dry_run: If True, print commands without executing them.
 
@@ -123,18 +117,16 @@ def run_etl(
 
     commands = [
         build_etl_command(
-            posts_script,
+            "src.etl.parse_posts",
             archive_path,
             output_path,
-            master,
             batch_size,
             tag_filter="python",
         ),
         build_etl_command(
-            links_script,
+            "src.etl.parse_links",
             archive_path,
             output_path,
-            master,
             batch_size,
         ),
     ]
@@ -153,9 +145,10 @@ def run_etl(
 
     for command in commands:
         started = time.perf_counter()
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, cwd=project_root)
         elapsed = time.perf_counter() - started
-        print(f"Completed {Path(command[3]).name} in {elapsed:.2f} seconds")
+        module_name = command[2].rsplit(".", maxsplit=1)[-1]
+        print(f"Completed {module_name} in {elapsed:.2f} seconds")
 
     subprocess.run(["hdfs", "dfs", "-du", "-s", output_path], check=True)
 
@@ -163,7 +156,7 @@ def run_etl(
 def main(argv: list[str] | None = None) -> int:
     """Parse CLI options and run or preview the archive ETL pipeline."""
     parser = argparse.ArgumentParser(
-        description="Verify and run the full Stack Overflow ETL on the Spark cluster."
+        description="Verify the Stack Overflow archive and run the full ETL pipeline."
     )
     parser.add_argument(
         "--project-root",
@@ -178,12 +171,11 @@ def main(argv: list[str] | None = None) -> int:
         help="path to the downloaded Stack Overflow archive",
     )
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="HDFS output root")
-    parser.add_argument("--master", default=DEFAULT_MASTER, help="Spark master URL")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="print the ETL commands without checking the archive or running Spark",
+        help="print the ETL commands without checking the archive or running them",
     )
     args = parser.parse_args(argv)
 
@@ -196,7 +188,6 @@ def main(argv: list[str] | None = None) -> int:
         project_root=project_root,
         archive_path=archive_path,
         output_path=args.output,
-        master=args.master,
         batch_size=args.batch_size,
         dry_run=args.dry_run,
     )
