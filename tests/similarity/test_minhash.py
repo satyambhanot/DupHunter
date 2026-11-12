@@ -29,8 +29,7 @@ def test_jaccard_estimate_for_half_overlap():
     left = set(range(100))
     right = set(range(33, 133))
     estimate = np.mean(
-        compute_signature(left, n=256, seed=23)
-        == compute_signature(right, n=256, seed=23)
+        compute_signature(left, n=256, seed=23) == compute_signature(right, n=256, seed=23)
     )
 
     assert estimate == pytest.approx(0.5, abs=0.1)
