@@ -1,5 +1,6 @@
-pyspark>=3.5,<4.0
-pyarrow
-pandas
-numpy
-matplotlib
+# Runtime requirements. Versions are bounded to the ones the tests run with (Python 3.10 or newer, Java 17).
+pyspark==3.5.3
+pyarrow>=17,<27
+pandas>=2.2,<4
+numpy>=1.26,<3
+matplotlib>=3.8,<4
