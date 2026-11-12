@@ -8,12 +8,12 @@ Every other issue is small and self-contained, so the rules they share live here
 ## The rules
 
 ### 1. Setup prerequisites (Satyam; tick the boxes as they land)
-- [ ] PR #34 merged into `dev`: `pyproject.toml` (ruff `E,F,W,I,B,UP`, line length 100, Python files only; pytest `testpaths = ["tests"]`), `requirements-dev.txt`, pre-commit, the PR template, `CONTRIBUTING.md`, CI job **Lint and test**.
+- [x] PR #34 merged into `dev`: `pyproject.toml` (ruff `E,F,W,I,B,UP`, line length 100, Python files only; pytest `testpaths = ["tests"]`), `requirements-dev.txt`, pre-commit, the PR template, `CONTRIBUTING.md`, CI job **Lint and test**.
 - [ ] Branch protection on `dev` and `main`: pull request required, check **Lint and test** required, one approval, no force pushes, admins included.
-- [ ] CI installs `requirements.txt` as well as `requirements-dev.txt` and runs `pytest -m "not slow"`. Today it installs only the dev tools, so every Spark test would fail there. The Ubuntu runner already has Java.
-- [ ] `tests/conftest.py` with a session-scoped `spark` fixture: `SparkSession.builder.master("local[2]").config("spark.sql.shuffle.partitions", 2)`, no network. Each module keeps its own tiny fixtures in its own `tests/<module>/conftest.py`.
-- [ ] `docs/CONTRACTS.md` merged (the tables below are its source).
-- [ ] The alignment fixes at the end of section 3 are done.
+- [x] CI installs `requirements.txt` as well as `requirements-dev.txt` and runs `pytest -m "not slow"`. Today it installs only the dev tools, so every Spark test would fail there. The Ubuntu runner already has Java.
+- [x] `tests/conftest.py` with a shared `spark` fixture (function-scoped, it asks `getOrCreate` each time and never stops the session, because some test modules stop their own): `SparkSession.builder.master("local[2]").config("spark.sql.shuffle.partitions", 2)`, no network. Each module keeps its own tiny fixtures in its own `tests/<module>/conftest.py`.
+- [x] `docs/CONTRACTS.md` merged (the tables below are its source).
+- [x] The alignment fixes at the end of section 3 are done (post key, `module:attr` policy, Word files, `python -m` in the cluster scripts).
 
 ### 2. File ownership (nobody edits a file they do not own; ask the owner in a comment)
 | Workstream | Owner | Owns |
@@ -40,7 +40,7 @@ A test file belongs to the owner of the module it tests. Report fragments and sl
 
 Rules: when `created` is absent, "earlier" means a smaller `post_id` (Stack Exchange ids grow with time). A contract changes only through a pull request that edits `docs/CONTRACTS.md` and the schema constant together; WS1 reviews it the same day.
 
-**Alignment fixes (open):** (1) ETL columns `id` become `post_id` (Satyam, in PR #48); (2) `lsh.py --bucket-policy` also accepts `module:attr` so WS3's strategies plug in from the command line (Iesrat); (3) remove `New DOCX Document.docx` and the Word lock file from every branch (Iesrat); (4) the scripts under `scripts/cluster/` call `python -m src.etl.parse_posts`, not `spark-submit <file>` (Jubayer).
+**Alignment fixes (done):** (1) ETL columns `id` become `post_id` (Satyam, in PR #48); (2) `lsh.py --bucket-policy` also accepts `module:attr` so WS3's strategies plug in from the command line (Iesrat); (3) remove `New DOCX Document.docx` and the Word lock file from every branch (Iesrat); (4) the scripts under `scripts/cluster/` call `python -m src.etl.parse_posts`, not `spark-submit <file>` (Jubayer).
 
 ### 4. Shared function signatures (code against these; **planned** ones are written by the issue named)
 | Module | Signature |
