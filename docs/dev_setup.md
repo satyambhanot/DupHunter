@@ -10,7 +10,7 @@ Every script takes its **input paths, output paths, and Spark master as argument
 
 1. Install Java 17 and Python 3.10 or newer.
 2. `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt`, then `pre-commit install` (the linter; see [CONTRIBUTING.md](../CONTRIBUTING.md))
-3. `./scripts/download_data.sh superuser` (1.4 GB). Satyam's ETL (#5) turns it into Parquet; the Super User Parquet is also shared on the team drive.
+3. `./scripts/download_data.sh superuser` (1.4 GB). The ETL (#5, `src/etl/README.md`) turns it into Parquet; the Super User Parquet is also shared on the team drive.
 4. On Windows, use WSL2 and keep the project **inside the WSL file system** (not under `/mnt/c`).
 
 ## Spark in local mode on a modest laptop
@@ -23,7 +23,7 @@ Every script takes its **input paths, output paths, and Spark master as argument
 
 ## Small files from the cluster owners
 
-Navjot shares these in #6 on the team drive (never in git): `python_tags`, `python_sample_50k`, and `pairs_e1`. Link: _to be added in #6_.
+Satyam writes the code for these (#6) and Jubayer runs it on Stack Overflow (#3). They are shared on the team drive, never in git: `python_tags`, `python_sample`, and `pairs_e1`. Link: _to be added when #3 is done_.
 
 ## Sharing results
 
