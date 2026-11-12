@@ -30,9 +30,24 @@ def lsh_probability(s: float, b: int, r: int) -> float:
     return 1.0 - (1.0 - s**r) ** b
 
 
+HINTS = {
+    "exact_jaccard": "run evaluate.py with --exact (the exact Jaccard of the pairs)",
+    "tags": "run evaluate.py with --posts-text",
+    "body_len": "run evaluate.py with --posts-text",
+}
+
+
 def _require(df: pd.DataFrame, column: str) -> None:
     if column not in df.columns:
         raise KeyError(f"the per-pair table has no column {column!r}")
+
+
+def _require_values(df: pd.DataFrame, column: str) -> None:
+    """The column exists and holds something: an all-null column means its input was not given."""
+    _require(df, column)
+    if df[column].isna().all():
+        hint = HINTS.get(column, "check the input of evaluate.py")
+        raise ValueError(f"column {column!r} is empty in the per-pair table; {hint}")
 
 
 def hits(df: pd.DataFrame, k: int = TOP_K) -> pd.Series:
@@ -72,7 +87,7 @@ def recall_by(
         One row per bin: ``bin``, ``n_pairs``, ``recall`` (``NaN`` for an empty bin) and ``low_n``.
         Pairs with a missing value in ``column`` are left out.
     """
-    _require(df, column)
+    _require_values(df, column)
     hit = hits(df, k)
     values = df[column]
     if bins is None:
@@ -105,7 +120,7 @@ def recall_by_similarity(
 
 def recall_by_tag(df: pd.DataFrame, top: int = 20, k: int = TOP_K, min_pairs: int = MIN_PAIRS):
     """Recall for the ``top`` most frequent tags; a pair counts once for every tag it has."""
-    _require(df, "tags")
+    _require_values(df, "tags")
     exploded = df.assign(tag=df["tags"].map(lambda tags: list(tags) if tags is not None else []))
     exploded = exploded.explode("tag").dropna(subset=["tag"])
     common = exploded["tag"].value_counts().head(top).index
@@ -191,13 +206,18 @@ def main(argv: list[str] | None = None) -> int:
     df = pd.read_csv(path) if path.suffix == ".csv" else pd.read_parquet(path)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    tables = {
-        "similarity": recall_by_similarity(df, args.k, 0.1, args.bands, args.rows),
-        "tags": recall_by_tag(df, args.top_tags, args.k),
-        "length": recall_by_length(df, k=args.k),
-        "year": recall_by_year(df, args.k),
+    builders = {
+        "similarity": lambda: recall_by_similarity(df, args.k, 0.1, args.bands, args.rows),
+        "tags": lambda: recall_by_tag(df, args.top_tags, args.k),
+        "length": lambda: recall_by_length(df, k=args.k),
+        "year": lambda: recall_by_year(df, args.k),
     }
-    for name, table in tables.items():
+    for name, build in builders.items():
+        try:
+            table = build()
+        except ValueError as error:  # an input that evaluate.py was not given: skip this breakdown
+            print(f"skipped the breakdown by {name}: {error}", file=sys.stderr)
+            continue
         table.to_csv(out / f"recall_by_{name}.csv", index=False)
         plot_recall(table, f"Recall by {name}", out / f"recall_by_{name}.png")
     sample_misses(df, 20, args.k).to_csv(out / "misses.csv", index=False)

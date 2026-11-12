@@ -127,3 +127,21 @@ def test_main_writes_tables_plots_and_misses(tmp_path):
         "recall_by_year.csv",
     } <= names
     assert {"recall_by_similarity.png", "misses.csv"} <= names
+
+
+def test_an_empty_column_says_which_input_is_missing():
+    df = _table([None, None], [True, False])
+    with pytest.raises(ValueError, match="--exact"):
+        errors.recall_by_similarity(df)
+    with pytest.raises(ValueError, match="--posts-text"):
+        errors.recall_by_tag(_table([0.5], [True], tags=[None]))
+
+
+def test_main_skips_a_breakdown_whose_input_is_missing(tmp_path, capsys):
+    df = _table([None, None], [True, False])  # evaluate.py was run without --exact
+    df.to_parquet(tmp_path / "per_pair.parquet")
+    out = tmp_path / "out"
+    assert errors.main(["--per-pair", str(tmp_path / "per_pair.parquet"), "--out", str(out)]) == 0
+    names = {p.name for p in out.iterdir()}
+    assert "recall_by_year.csv" in names and "recall_by_similarity.csv" not in names
+    assert "skipped the breakdown by similarity" in capsys.readouterr().err
