@@ -109,3 +109,27 @@ def test_per_pair_table_takes_exact_jaccard(spark):
     exact = spark.createDataFrame([(10, 2, 0.75)], "dup_id long, cand_id long, jaccard double")
     row = evaluate.per_pair_table(candidates, _key(spark, [(10, 2)]), None, exact).collect()[0]
     assert row.exact_jaccard == pytest.approx(0.75) and row.tags is None
+
+
+def test_command_line_end_to_end(spark, tmp_path):
+    candidates = _cands(spark, [(10, 1, 0.9), (10, 2, 0.8), (20, 5, 0.9)])
+    candidates.write.parquet(str(tmp_path / "cands"))
+    _key(spark, [(10, 2), (20, 5)]).write.parquet(str(tmp_path / "key"))
+    csv_path = tmp_path / "metrics.csv"
+    per_pair = tmp_path / "per_pair"
+    argv = ["--candidates", str(tmp_path / "cands"), "--answer-key", str(tmp_path / "key")]
+    argv += ["--out", str(csv_path), "--experiment", "E3", "--settings", '{"b": 32}']
+    argv += ["--n-questions", "1000", "--per-pair-out", str(per_pair)]
+    assert evaluate.main(argv) == 0
+    with csv_path.open() as handle:
+        row = next(csv.DictReader(handle))
+    assert row["experiment"] == "E3" and row["settings_json"] == '{"b": 32}'
+    assert float(row["recall@1"]) == pytest.approx(0.5)  # question 20 ranks its original first
+    assert float(row["reduction_ratio"]) == pytest.approx(1 - 3 / 499500)
+    assert spark.read.parquet(str(per_pair)).count() == 2
+
+
+def test_an_empty_answer_key_gives_zero_queries_and_no_error(spark):
+    empty = spark.createDataFrame([], "dup_id long, original_id long, created timestamp")
+    result = evaluate.evaluate(_cands(spark, [(10, 1, 0.9)]), empty, n_questions=10)
+    assert result["n_queries"] == 0 and result["recall@10"] == 0.0

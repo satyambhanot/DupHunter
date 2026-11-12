@@ -22,7 +22,7 @@ import math
 import sys
 from pathlib import Path
 
-from pyspark.sql import DataFrame, Window
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 
 from src.evaluation.metrics import METRICS, mean_metrics, reduction_ratio
@@ -167,11 +167,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     """Evaluate one run, append its metrics row and optionally write the per-pair table."""
-    from src.etl.spark_session import get_spark
-
     args = parse_args(argv)
     settings = json.loads(args.settings)
-    spark = get_spark(args.master, "duphunter-evaluate")
+    spark = SparkSession.builder.master(args.master).appName("duphunter-evaluate").getOrCreate()
     candidates = spark.read.parquet(args.candidates)
     answer_key = spark.read.parquet(args.answer_key)
     metrics = evaluate(candidates, answer_key, args.n_questions, args.max_rank)
