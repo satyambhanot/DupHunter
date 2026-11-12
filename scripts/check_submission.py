@@ -57,8 +57,11 @@ CHECKLIST_ITEMS = [
     "Presentation prepared",
     "Final report submitted in the required format",
 ]
+# A heading line on its own: "References", "10 References", "Appendix", "Appendix B". A sentence
+# that merely starts with the word, such as "References to earlier work ...", does not end the body.
 _END_OF_BODY = re.compile(
-    r"^\s*(references|bibliography|appendix|appendices)\b", re.IGNORECASE | re.MULTILINE
+    r"^\s*(?:\d+(?:\.\d+)*\.?\s+)?(?:references|bibliography|appendix(?:es)?(?:\s+[A-Z])?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 Result = tuple[bool, str]

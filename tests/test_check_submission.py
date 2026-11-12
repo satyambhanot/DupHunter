@@ -178,3 +178,19 @@ def test_main_exits_zero_when_everything_passes(tmp_path, monkeypatch):
     _pdf(tmp_path / "docs" / "report" / "main.pdf", 12)
     (tmp_path / cs.CHECKLIST).write_text(_checklist(cs.CHECKLIST_ITEMS))
     assert cs.main(["--skip-links"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("heading", "ends_body"),
+    [
+        ("References", True),
+        ("10 References", True),
+        ("Bibliography", True),
+        ("Appendix B", True),
+        ("References to earlier work are discussed in section 3.", False),
+        ("Appendix tables are described below and continue", False),
+    ],
+)
+def test_only_a_heading_line_ends_the_body(heading, ends_body):
+    texts = ["intro"] + ["text"] * 11 + [f"{heading}\n[1] a"]
+    assert cs.body_page_count(texts) == (12 if ends_body else 13)
