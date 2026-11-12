@@ -46,9 +46,7 @@ def test_word_shingles_clean_html_and_use_short_text_tokens(spark):
 
 def test_character_shingles_and_builder_registry(spark):
     assert set(SHINGLE_BUILDERS) == {"word", "character"}
-    frame = spark.sql(
-        "SELECT 1 AS post_id, '' AS title, 'abcdefg' AS body"
-    )
+    frame = spark.sql("SELECT 1 AS post_id, '' AS title, 'abcdefg' AS body")
 
     row = build_shingles(
         frame,
@@ -69,15 +67,11 @@ def test_code_and_pre_content_is_separate(spark):
 
     row = build_shingles(frame, ShingleConfig(k=1)).first()
     expected_text = build_shingles(
-        spark.sql(
-            "SELECT 1 AS post_id, 'Question' AS title, 'normal text' AS body"
-        ),
+        spark.sql("SELECT 1 AS post_id, 'Question' AS title, 'normal text' AS body"),
         ShingleConfig(k=1),
     ).first()
     expected_code = build_shingles(
-        spark.sql(
-            "SELECT 1 AS post_id, '' AS title, 'code sample x = 1' AS body"
-        ),
+        spark.sql("SELECT 1 AS post_id, '' AS title, 'code sample x = 1' AS body"),
         ShingleConfig(k=1),
     ).first()
 
@@ -99,14 +93,16 @@ def test_drop_common_share_removes_shingles_above_threshold(spark):
         ShingleConfig(k=1, drop_common_share=0.5),
     ).collect()
     full = build_shingles(frame, ShingleConfig(k=1)).collect()
-    common = build_shingles(
-        spark.sql("SELECT 1 AS post_id, '' AS title, 'shared' AS body"),
-        ShingleConfig(k=1),
-    ).first().shingles[0]
-
-    assert sum(len(row.shingles) for row in retained) < sum(
-        len(row.shingles) for row in full
+    common = (
+        build_shingles(
+            spark.sql("SELECT 1 AS post_id, '' AS title, 'shared' AS body"),
+            ShingleConfig(k=1),
+        )
+        .first()
+        .shingles[0]
     )
+
+    assert sum(len(row.shingles) for row in retained) < sum(len(row.shingles) for row in full)
     assert all(common not in row.shingles for row in retained)
     assert all(len(row.shingles) > 0 for row in retained)
 
@@ -131,3 +127,10 @@ def test_config_is_frozen_and_validated():
         ShingleConfig(k=0)
     with pytest.raises(ValueError, match="between 0 and 1"):
         ShingleConfig(drop_common_share=1.1)
+
+
+def test_escaped_angle_brackets_do_not_delete_text(spark):
+    """Entities such as &lt; and &gt; in prose must not be read as tags after decoding."""
+    rows = spark.sql("SELECT 1 AS post_id, '' AS title, 'if a &lt; b then c &gt; d' AS body")
+    row = build_shingles(rows, ShingleConfig(k=1)).collect()[0]
+    assert len(row.shingles) == 6  # if, a, b, then, c, d

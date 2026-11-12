@@ -9,7 +9,6 @@ import numpy as np
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import ArrayType, LongType, StructField, StructType
 
-
 PRIME = 2_147_483_647
 SHINGLE_MASK = PRIME
 EMPTY_SIGNATURE_VALUE = PRIME
@@ -57,10 +56,7 @@ def _signature_from_coefficients(
 ) -> np.ndarray:
     if shingles.size == 0:
         return np.full(a.size, EMPTY_SIGNATURE_VALUE, dtype=np.int64)
-    hashed = (
-        a[:, np.newaxis] * shingles[np.newaxis, :]
-        + b[:, np.newaxis]
-    ) % PRIME
+    hashed = (a[:, np.newaxis] * shingles[np.newaxis, :] + b[:, np.newaxis]) % PRIME
     return np.min(hashed, axis=1)
 
 
@@ -95,9 +91,12 @@ def _partition_signatures(
         yield row[id_index], signature.tolist()
 
 
+DEFAULT_CONFIG = MinHashConfig()
+
+
 def build_signatures(
     posts: DataFrame,
-    config: MinHashConfig = MinHashConfig(),
+    config: MinHashConfig = DEFAULT_CONFIG,
     *,
     post_id_col: str = "post_id",
     shingles_col: str = "shingles",
