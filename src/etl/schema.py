@@ -15,7 +15,7 @@ LINK_DUPLICATE = 3
 # Questions and answers, no text.
 POSTS_META = pa.schema(
     [
-        ("id", pa.int64()),
+        ("post_id", pa.int64()),
         ("post_type", pa.int8()),  # 1 question, 2 answer
         ("parent_id", pa.int64()),  # answers only
         ("created", pa.timestamp("ms")),
@@ -28,7 +28,7 @@ POSTS_META = pa.schema(
 # Questions only, with text. HTML is kept as it is; cleaning belongs to the shingling stage.
 POSTS_TEXT = pa.schema(
     [
-        ("id", pa.int64()),
+        ("post_id", pa.int64()),
         ("created", pa.timestamp("ms")),
         ("tags", pa.list_(pa.string())),
         ("title", pa.string()),

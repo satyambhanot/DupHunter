@@ -53,7 +53,7 @@ def parse_tags(raw: str | None) -> list[str]:
 def post_from_attributes(attributes: dict[str, str]) -> dict:
     """Convert the attributes of one ``<row>`` of ``Posts.xml`` into a post record."""
     return {
-        "id": int(attributes["Id"]),
+        "post_id": int(attributes["Id"]),
         "post_type": int(attributes["PostTypeId"]),
         "parent_id": optional_int(attributes.get("ParentId")),
         "created": parse_timestamp(attributes.get("CreationDate")),

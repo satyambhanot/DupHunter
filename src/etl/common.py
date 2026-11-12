@@ -118,7 +118,7 @@ class BatchWriter:
         """Add one row (a dict with the schema's columns); write a batch when the buffer is full."""
         if row.get("created") is None:
             raise ValueError(
-                f"row {row.get('id')} has no creation date, so it has no year partition"
+                f"row {row.get('post_id')} has no creation date, so it has no year partition"
             )
         # Keep only the schema's columns: a post dict also carries the body text, which this table
         # does not store, and a full batch of bodies would take hundreds of MB.

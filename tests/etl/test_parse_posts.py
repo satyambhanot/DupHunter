@@ -48,23 +48,23 @@ def test_parse_tags_empty_or_missing(raw):
 
 
 def test_missing_owner_is_none():
-    posts = {post["id"]: post for post in _posts()}
+    posts = {post["post_id"]: post for post in _posts()}
     assert posts[3]["owner_user_id"] is None
     assert posts[1]["owner_user_id"] == 7
 
 
 def test_closed_flag():
-    posts = {post["id"]: post for post in _posts()}
+    posts = {post["post_id"]: post for post in _posts()}
     assert posts[3]["closed"] is True
     assert posts[1]["closed"] is False
 
 
 def test_other_post_types_are_skipped():
-    assert [post["id"] for post in _posts()] == [1, 2, 3]
+    assert [post["post_id"] for post in _posts()] == [1, 2, 3]
 
 
 def test_answer_keeps_parent_id():
-    posts = {post["id"]: post for post in _posts()}
+    posts = {post["post_id"]: post for post in _posts()}
     assert posts[2]["parent_id"] == 1
     assert posts[1]["parent_id"] is None
 
@@ -88,7 +88,7 @@ def test_question_answer_split(tmp_path):
     assert counts == {"posts_meta": 3, "posts_text": 2, "questions": 2, "answers": 1}
     assert len(_read(tmp_path, "posts_meta")) == 3
     text = _read(tmp_path, "posts_text")
-    assert {row["id"] for row in text} == {1, 3}
+    assert {row["post_id"] for row in text} == {1, 3}
 
 
 def test_posts_text_keeps_title_body_and_html(tmp_path):
@@ -102,7 +102,7 @@ def test_posts_text_keeps_title_body_and_html(tmp_path):
 def test_tag_filter_keeps_only_matching_questions(tmp_path):
     counts = parse_posts.write_posts(_posts(), str(tmp_path), tag_filter="python")
     text = _read(tmp_path, "posts_text")
-    assert [row["id"] for row in text] == [1]
+    assert [row["post_id"] for row in text] == [1]
     assert all("python" in row["tags"] for row in text)
     assert counts["posts_meta"] == 3  # metadata is never filtered
 
@@ -120,7 +120,7 @@ def test_batching_round_trip(tmp_path):
     counts = parse_posts.write_posts(_posts(xml), str(tmp_path), batch_size=4)
     assert counts["posts_text"] == 10
     rows = _read(tmp_path, "posts_text")
-    assert sorted(row["id"] for row in rows) == list(range(10))
+    assert sorted(row["post_id"] for row in rows) == list(range(10))
 
 
 def test_output_is_partitioned_by_year(tmp_path):
@@ -186,12 +186,12 @@ def test_batch_size_must_be_positive(tmp_path):
 def test_missing_creation_date_fails_with_the_row_id(tmp_path):
     writer = common.BatchWriter(POSTS_META, str(tmp_path), "posts_meta")
     with pytest.raises(ValueError, match="row 9 has no creation date"):
-        writer.add({"id": 9, "created": None})
+        writer.add({"post_id": 9, "created": None})
 
 
 def test_batch_buffer_drops_text_columns(tmp_path):
     writer = common.BatchWriter(POSTS_META, str(tmp_path), "posts_meta")
-    writer.add({"id": 1, "created": datetime(2015, 1, 1), "body": "x" * 1000, "title": "t"})
+    writer.add({"post_id": 1, "created": datetime(2015, 1, 1), "body": "x" * 1000, "title": "t"})
     assert set(writer.rows[0]) == set(POSTS_META.names)
 
 
