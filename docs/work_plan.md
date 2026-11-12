@@ -1,139 +1,99 @@
 # DupHunter Work Plan
 
-This is the team's working plan, based on the [revised proposal (v3)](proposal/ENSF612_Project_Proposal_v3.pdf) and the Course Project Guidelines. Every task is a GitHub issue; this page shows how they fit together.
+Status on **Thursday Nov 12, 2026**. This is the team's working plan, based on the
+[revised proposal (v3)](proposal/ENSF612_Project_Proposal_v3.pdf) and the Course Project Guidelines. Every task is a
+GitHub issue; issue [#26](https://github.com/satyambhanot/DupHunter/issues/26) is the short roadmap, and
+[CONVENTIONS.md](CONVENTIONS.md) and [CONTRACTS.md](CONTRACTS.md) hold the rules and the interfaces between the
+workstreams.
 
-**Core idea:** one problem, studied in depth. Each stage of the duplicate search is a design choice, and each choice is settled by an experiment (E1 to E8). Q1 to Q3 must be finished; SON blocking (Q4) is secondary.
+**Core idea:** one problem, studied in depth. Each stage of the duplicate search is a design choice settled by an
+experiment (E1 to E8). Q1 to Q3 must be finished; SON blocking (Q4) is secondary.
 
-**Cut order if time runs short:** the run on all of Stack Overflow (E8 stretch), then splitting big buckets (E7 stretch), then TF-IDF re-ranking (E4 stretch), then SON blocking (E6). Decided at the core checkpoint on Nov 13 (#14).
+## 1. Where we are
 
-## 1. How we split the work by compute
-
-| Laptop | Who | Role |
-|---|---|---|
-| Intel i7-13650HX, 16 GB (Laptop A) | Jubayer | Cluster: HDFS NameNode, Spark master, worker, driver |
-| AMD Ryzen 7 5800H, 16 GB (Laptop B) | Navjot | Cluster: HDFS DataNode, Spark worker |
-| Lighter laptops | Satyam, Iesrat | Development on Super User in local mode ([dev_setup.md](dev_setup.md)) |
-
-- **Cluster owners** (Jubayer, Navjot) own everything that needs the full Stack Overflow data or the cluster. Issues carry the label `compute: cluster`.
-- **Lighter laptops** (Satyam, Iesrat) write and test code on Super User and on small exported files. Issues carry the label `compute: light`.
-- **Rule:** every script takes input paths, output paths, and the Spark master as arguments. The owner writes it; the cluster owner runs the same script at full scale (#31, #32).
-
-## 2. Experiments
-
-| Exp. | Stage | What it settles | Written by | Run at scale by | Issue |
-|---|---|---|---|---|---|
-| E1 | Shingles | Which text representation separates duplicates best | Iesrat | Iesrat (small) | #27 |
-| E2 | MinHash | Signature length vs. error and cost, compared with theory | Iesrat | Iesrat; cost part by Navjot | #28 |
-| E3 | LSH | Band and row setting; measured vs. predicted S-curve | Iesrat | Iesrat; full subset by Navjot | #13 |
-| E4 | Check and rank | Ranking by signature vs. exact Jaccard vs. TF-IDF | Navjot | Navjot | #29 |
-| E5 | Baselines | Accuracy given up for time saved (exact search, Spark `MinHashLSH`) | Jubayer | Jubayer | #10, #11 |
-| E6 | Blocking | No blocking vs. single tags vs. SON tag sets | Satyam (SON), Jubayer (blocking) | Jubayer | #16, #17 |
-| E7 | Big buckets | Size limit vs. dropping common shingles vs. splitting | Navjot | Navjot | #30 |
-| E8 | Scaling | 1 to 8 cores, one or two laptops, 10% to 100% of data | Satyam (scripts, analysis) | Jubayer, Navjot | #15, #32 |
-
-The evaluation script (#12) and error analysis (#33) are Satyam's and are used by every experiment.
-
-## 3. Timeline
-
-| Milestone | Due | Issues |
-|---|---|---|
-| W1: Data and cluster | Nov 1 | #2, #4, #5, #35 |
-| W2: Core on Super User | **Nov 8** | #3, #7, #8, #9, #12 |
-| Core checkpoint | Nov 13 | #6, #10, #11, #13, #14, #27, #28, #29, #31 |
-| Experiments and results freeze | Nov 20 | #15, #16, #17, #30, #32, #33 |
-| Presentation | Nov 23 | #23 (slides at least 12 hours before our slot) |
-| Final report and code | Dec 4 | #22, #24, #25 |
-
-The Nov 8 deadline is fixed: the whole core (shingles, MinHash, LSH) must run on Super User by then and the Stack Overflow data must be on the cluster, or the checkpoint slips. Midterm week (Oct 30 to Nov 3) is light: downloads, ETL code, cluster setup.
-
-Other course deadlines: Assignment 3 on Nov 6, Assignment 4 on Dec 4.
-
-## 4. Who does what
-
-| Member | Issues |
+| Done and merged into `dev` | Not done |
 |---|---|
-| Satyam Bhanot (light) | #2 email, #5 ETL code, #12 evaluation script, #15 scaling scripts and analysis, #16 SON, #22 reproducibility, #33 error analysis |
-| Iesrat Jahan (light) | #7 shingles, #8 MinHash, #9 LSH, #13 LSH settings, #27 representation, #28 signature length |
-| Md Jubayer Khan (cluster) | #3 Stack Overflow data, #4 cluster (with Navjot), #10 exact baseline, #11 Spark baseline, #17 tag blocking, #31 and #32 (with Navjot) |
-| Navjot Singh Shienh (cluster) | #4 cluster (with Jubayer), #6 profile and answer key, #29 check and rank, #30 big buckets, #31 and #32 (with Jubayer) |
-| All | #14 core checkpoint, #23 slides, #24 final report, #25 submission checklist |
+| Linter, CI, conventions, contracts, hygiene and README checks | **No experiment has run on real data yet** (E1 to E8) |
+| Streaming ETL, dataset profile, answer key, sample exports; the first real run on Super User (516,669 questions, 14,639 answer-key pairs) | Stack Overflow on the cluster: download, ETL, python subset in HDFS (#3, #31) |
+| Shingles, MinHash, LSH with plug-in hooks, the E3 simulation study | Command lines for shingles and MinHash (needed to produce candidates) |
+| Evaluation library and command line, error analysis, scaling commands, event-log parser, Amdahl fit, submission checks | Check and rank (E4), SON (E6), big buckets (E7), baselines (E5) |
+| Cluster master runbook and scripts, Stack Overflow ETL wrapper | Laptop B as a worker, the cluster verified running |
+| WS1 report fragment and slide pack (draft) | The other three report fragments, the deck, the report assembly |
 
-Early on (before LSH exists) Navjot builds the exact check on Super User and helps with the cluster; Jubayer's download and ETL run keep Laptop A busy; Satyam's ETL code and Super User Parquet unblock Iesrat first.
+## 2. Four workstreams
 
-## 5. Dependencies
+| Workstream | Member | Laptop | Issues still open |
+|---|---|---|---|
+| WS1 Data foundation and evaluation | Satyam Bhanot | lighter | #6 (Stack Overflow runs, share the data), #33 and #15 (need results), #36 (Stack Overflow numbers, E8 and error parts), #22, #25 (final passes), #35, #49 |
+| WS2 Similarity engine | Iesrat Jahan | lighter | #13 (real runs), #27 (E1), #28 (E2), #37 (methodology section), #23 (deck) |
+| WS3 Candidate refinement and blocking | Navjot Singh Shienh | AMD Ryzen 7 5800H, cluster Laptop B | #38 (join the cluster), #29 (E4), #16 and #17 (SON, secondary), #30 (E7), #24 (report assembly), #39 (section) |
+| WS4 Cluster, baselines and scale | Md Jubayer Khan | Intel i7-13650HX, cluster Laptop A | #10 and #11 (E5), #31 (full run), #32 (E8 A and B), #14 (checkpoint), #42 (section); #3 and #4 closed on merge but their real work (data in HDFS, cluster verified running) still has to be confirmed |
 
-Each issue lists what it depends on and what it blocks. Summary:
+## 3. Experiments
 
-| Issue | Needs first |
+| Exp. | Stage | Workstream | Issue | Status |
+|---|---|---|---|---|
+| E1 | Text representation (shingles) | WS2 | #27 | not started; needs the Super User data |
+| E2 | MinHash signature length | WS2 | #28 | not started |
+| E3 | LSH settings and S-curve | WS2 | #13 | simulation merged; real runs open |
+| E4 | Checking and ranking candidates | WS3 | #29 | not started |
+| E5 | Baselines: exact search, Spark `MinHashLSH` | WS4 | #10, #11 | not started |
+| E6 | SON tag blocking (secondary) | WS3 | #16, #17 | not started |
+| E7 | Big LSH buckets (skew) | WS3 | #30 | not started |
+| E8 | Scaling: cores, machines, data size | WS1 (scripts, analysis), WS4 (runs) | #15, #32 | scripts merged; runs open |
+
+**Cut order if time runs short:** the stretch issues first (#43 data-size and full Stack Overflow run, #41 bucket
+splitting, #40 TF-IDF), then SON blocking (#16, #17). A cut issue is closed as not planned with the reason.
+
+## 4. Calendar (proposed; the checkpoint moves from Nov 13 to Nov 18)
+
+| Date | What must be true |
 |---|---|
-| #3 data on the cluster | #4 cluster, #5 ETL code (the download can start at once) |
-| #6 profile and answer key | #3 |
-| #7 shingles, #12 evaluation | #5 (Super User Parquet) |
-| #8 MinHash | #7 |
-| #9 LSH | #8 |
-| #10 exact baseline | #3, #6, #7 |
-| #11 Spark baseline | #7, #10 |
-| #13 LSH settings (E3) | #9, #12 |
-| #14 core checkpoint | #4, #12, #13, #27, #28, #29, #31 |
-| #15 scaling scripts | #4 |
-| #16 SON | #5, #6 (python tags) |
-| #17 tag blocking | #14, #16 |
-| #27 representation (E1) | #6 (pairs), #7 |
-| #28 signature length (E2) | #8 |
-| #29 check and rank (E4) | #7, #9, #12 |
-| #30 big buckets (E7) | #9, #12, #31 |
-| #31 full-scale run | #3, #4, #9 |
-| #32 scaling runs | #14, #15, #30 |
-| #33 error analysis | #12, #29, #31 |
-| #23 slides, #24 report | #14 |
-| #25 submission | #22, #23, #24 |
+| Thu Nov 12 | Super User data shared on the team drive; Stack Overflow download speed known; cluster state known; stretch issues cut |
+| Fri Nov 13 | Command lines for shingles and MinHash; E4 and SON started on Super User; onboarding files from everyone (#35) |
+| Sat Nov 14 to Mon Nov 16 | E1, E2, E3 on Super User; E5 baselines on the 10,000 and 50,000 samples; Stack Overflow ETL running; report skeleton |
+| **Wed Nov 18: core checkpoint (#14)** | The core runs on Super User; the Stack Overflow run has started; go or cut for each secondary part |
+| Thu Nov 19 to Fri Nov 20 | Full python-subset run (#31); E7, E8 tests A and B; evaluation and error analysis on real candidates. **Results freeze Nov 20: no number changes after it** |
+| Sat Nov 21 to Mon Nov 23 | Section slide packs (#36, #37, #39, #42), deck (#23), rehearsal. Slides go in at least 12 hours before our slot (presentation Nov 23) |
+| Nov 24 to Dec 2 | Report fragments, assembly (#24), submission checks (#25), reproducibility pass (#22), individual reflections |
+| Thu Dec 3 | Buffer |
+| **Fri Dec 4** | Report, code and data due |
 
-**Critical path:** #5, #3, #9, #31, #14, #32. Delays here delay everything, so these get help first. The first hand-offs to watch: Satyam's Super User Parquet (#5) to Iesrat, and the cluster (#4) to everyone.
+## 5. What each person does next
 
-## 6. Guideline coverage
-
-Every requirement in the guidelines has an issue that produces it.
-
-| Guideline requirement | Where it is covered |
+| Who | Next steps, in order |
 |---|---|
-| Dataset: source, size, records, features, format, quality, missing values, preprocessing, limitations (4.2) | #3, #5, #6, #27 |
-| Algorithmic design, why chosen, cost, alternatives (5) | #27, #28, #13, #29, #30, #16 |
-| Scalability: size, complexity, memory, time, larger data (5) | #4, #15, #30, #32 |
-| Implementation: code, run instructions, packages, pipeline, configuration (5) | #5, #22 |
-| Evaluation metrics; compare methods, configurations, algorithms (6) | #10, #11, #12, #13, #17, #29 |
-| Course concepts used where relevant (12) | #7, #27, #8, #28, #9, #13, #16 |
-| Analysis, not just numbers (9) | #33, #15 |
-| Presentation (8) | #23 |
-| Final report (9) | #24 |
-| Reproducibility; own code vs. existing libraries (15) | #11, #22 |
-| Individual contributions | #24 (report section 11) |
-| Final submission checklist (16) | #25 |
-| Instructor feedback: scope, cluster resources, stream module | #14, v3 scope change, #4 and #32, stream module dropped |
+| **Satyam** | Upload the Super User Parquet, answer key and exports to the team drive and post the link on #6; run the whole pipeline on the 50,000-question sample as a smoke test; update this plan and #26; run the evaluation and the error analysis when candidates exist; E8 analysis after #32; fill in the Stack Overflow numbers in #36; final checks and hand-in on Dec 2 |
+| **Iesrat** | Command lines for shingles and MinHash; E1 on `pairs_e1`, E2, then E3 on real data; switch the three test modules to the shared `spark` fixture; methodology section and slides (#37); assemble the deck from Nov 21 (#23) |
+| **Navjot** | Join the cluster from Laptop B (#38); E4 (#29) on Super User candidates; SON (#16) on the tags export; the report skeleton `docs/report/main.tex` and `refs.bib` (#24); E7 (#30) when the full run exists |
+| **Jubayer** | Say how long the Stack Overflow download takes; confirm HDFS and Spark are running (`check_cluster.sh`); run the ETL on Stack Overflow (#3); E5 baselines (#10, #11); `core_job.py` and the full run (#31); scaling tests A and B (#32); lead the checkpoint (#14) |
+
+## 6. Critical path and risks
+
+**Critical path:** Super User data shared, then command lines for shingles and MinHash, then candidates on the sample,
+and in parallel the Stack Overflow download, ETL and python subset in HDFS (#3), then the full run (#31), then E7, E8 and
+the error analysis. Delays here delay everything, so these get help first.
+
+| Risk | Mitigation |
+|---|---|
+| The 68.9 GB Stack Overflow download is too slow | Measure the speed today. Fallback: stream it straight into `7z` (`curl ... \| 7z x -si -so`) and stop after enough posts (the oldest questions come first), or run E8 on Super User plus a sample; write the limitation in the report |
+| Navjot's workstream starts late (nothing merged yet) | Check at the Nov 18 checkpoint; cut SON (#16, #17) first |
+| One Spark test module stops the shared session | The shared fixture now asks `getOrCreate` every time; modules should use it |
+| Results change after the slides are made | Results freeze on Nov 20 |
+| The repository must be readable by the instructor and TAs | Ask the instructor today (#25) |
 
 ## 7. How we work
 
-**Issues and the board**
-- Pick up an issue by assigning yourself and moving it to **In progress** on the project board.
-- Tick the checklist in the issue as you go. Move it to **Done** when the "Done when" line is true.
-- Blocked? Comment on the issue and mention the person you are waiting for.
-
-**Branches and pull requests** (full rules in [CONTRIBUTING.md](../CONTRIBUTING.md))
-- Work on a branch named `issue-<number>-short-name`, created from `dev`. Nobody pushes to `dev` or `main`.
-- Open a pull request into `dev` with `Closes #<number>`. The **Lint and test** check must pass and one teammate must approve.
-- Squash and merge into `dev`. At each milestone, a pull request merges `dev` into `main`.
-
-**Data and results**
-- Never commit data. `data/` is ignored by git.
-- Put figures and tables in `results/<experiment>/` (for example `results/e3_lsh/`), with a short note of the settings used.
-- Save sample seeds and LSH settings in the repo so results can be reproduced.
-
-**Weekly sync**
-- A short meeting each week: what is done, what is blocked, and whether we are on track for the next milestone.
+- Every issue has one owner and the same four-line Definition of Done. Branch `ws<N>/<issue>-short-name` from `dev`, pull
+  request into `dev` with a title that starts `[#<issue>]`, `Closes #<n>` (or `Part of #<n>` when the issue stays open), the
+  template filled in, the ring reviewer requested (WS1 reviews WS2, WS2 reviews WS3, WS3 reviews WS4, WS4 reviews WS1),
+  CI green, squash merge. Full rules: [CONVENTIONS.md](CONVENTIONS.md) and [../CONTRIBUTING.md](../CONTRIBUTING.md).
+- Never commit data. Results (small CSV files, plots, Markdown tables) go in `results/<experiment>/` with the settings
+  used; every setting is in `configs/`.
+- A short sync each week: what is done, what is blocked, whether we are on track for the next milestone.
 
 ## 8. Definition of done
 
-A task is done when:
-1. The pull request is merged into `dev` (CI green, one approval) and the code runs from the instructions in its README.
-2. Results are saved in `results/` with the settings used.
-3. The checklist in its issue is complete.
-4. Anything we did not write ourselves is marked as a library or external code.
+A task is done when the pull request is merged into `dev` (CI green, one review), its results are in `results/` with the
+settings used, the acceptance criteria in its issue are ticked, and anything we did not write ourselves is marked as a
+library or external code.
