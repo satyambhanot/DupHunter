@@ -18,7 +18,7 @@ Every other issue is small and self-contained, so the rules they share live here
 ### 2. File ownership (nobody edits a file they do not own; ask the owner in a comment)
 | Workstream | Owner | Owns |
 |---|---|---|
-| WS1 Data foundation and evaluation | Satyam (`satyambhanot`) | `src/etl/`, `src/evaluation/`, `src/scaling/`, `scripts/run_scaling.sh`, `scripts/parse_eventlogs.py`, `scripts/check_submission.py`, `README.md`, `docs/CONTRACTS.md`, `docs/dev_setup.md`, `pyproject.toml`, `.github/`, `tests/etl/`, `tests/evaluation/`, `tests/scaling/`, `tests/test_repo_hygiene.py`, `results/e8_scaling/analysis/`, `results/error_analysis/`, `docs/report/ws1_*.tex`, `docs/slides/ws1_*.md` |
+| WS1 Data foundation and evaluation | Satyam (`satyambhanot`) | `src/etl/`, `src/evaluation/`, `src/scaling/`, `scripts/run_scaling.sh`, `scripts/parse_eventlogs.py`, `scripts/check_submission.py`, `README.md`, `docs/CONTRACTS.md`, `docs/CONVENTIONS.md`, `docs/dev_setup.md`, `pyproject.toml`, `.github/`, `tests/etl/`, `tests/evaluation/`, `tests/scaling/`, `tests/test_repo_hygiene.py`, `results/e8_scaling/analysis/`, `results/error_analysis/`, `docs/report/ws1_*.tex`, `docs/slides/ws1_*.md` |
 | WS2 Similarity engine | Iesrat (`Iesratjahan`) | `src/similarity/`, `tests/similarity/`, `configs/e1_*`, `configs/e3_*`, `results/e1_*/`, `results/e2_*/`, `results/e3_lsh/`, `docs/slides/deck.*`, `docs/presentation/`, `docs/report/ws2_*.tex`, `docs/slides/ws2_*.md` |
 | WS3 Candidate refinement and blocking | Navjot (`NavjotSinghShienh`) | `src/verification/`, `src/blocking/`, `tests/verification/`, `tests/blocking/`, `results/e4_*/`, `results/e6_*/`, `results/e7_*/`, `docs/report/main.tex`, `docs/report/refs.bib`, `scripts/check_report.py`, `docs/cluster_laptop_b.md`, `docs/report/ws3_*.tex`, `docs/slides/ws3_*.md` |
 | WS4 Cluster, baselines and scale | Jubayer (`jubayerkhan`) | `src/baselines/`, `scripts/cluster/`, `configs/cluster/`, `docs/cluster_setup.md`, `docs/cluster_schedule.md`, `docs/checkpoint.md`, `tests/cluster/`, `tests/baselines/`, `results/e5_*/`, `results/e8_scaling/runs*.csv`, `docs/report/ws4_*.tex`, `docs/slides/ws4_*.md` |
@@ -69,10 +69,11 @@ Definitions everyone uses: Recall@K counts the original among the first K ranked
 
 ### 6. Workflow
 - One issue is one branch and one pull request. Branch `issue-<n>-short-name` from the latest `dev`; never merge one issue's branch into another. If you must build on an unmerged pull request, say so in its description and merge in order.
-- Pull request into `dev`, short imperative title, template filled in, body contains `Closes #<n>`. The **Lint and test** check must be green. Squash and merge.
+- Pull request into `dev`, short imperative title, template filled in, body contains `Closes #<n>` (`Part of #<n>` when the issue stays open afterwards, as for this one). Request the ring reviewer and assign yourself. The **Lint and test** check must be green. Squash and merge.
 - Review in a ring within 24 hours: WS1 reviews WS2, WS2 reviews WS3, WS3 reviews WS4, WS4 reviews WS1. The reviewer checks the issue's acceptance criteria and the file-ownership rule.
 - `dev` goes to `main` only at milestones, with a merge commit.
-- Pull requests stay under about 400 changed lines and touch only files you own.
+- Pull requests stay under about 400 changed lines and touch only files you own. If one cohesive unit is larger, say so and why in the description.
+- Branch names: `issue-<n>-short-name` for every issue, including this one; `chore/short-name` only for work with no issue.
 
 ### 7. Milestones (as on GitHub)
 W1 Data and cluster Nov 1 (overdue); W2 Core on Super User Nov 8; Core checkpoint Nov 13; Experiments and results freeze Nov 20; Presentation Nov 23; Final report and code Dec 4. A move of the checkpoint to Nov 18 is proposed and not yet agreed.
