@@ -1,0 +1,126 @@
+% WS1 report fragment (issue #36): introduction, dataset and data preparation, experimental design.
+% No preamble. The report (docs/report/main.tex, WS3) pulls this file in with \input and then places
+% \wsoneIntro (Section 2), \wsoneDataset (Section 4), \wsoneDesign (Section 7) and
+% \wsoneContribution (Section 11). Every number carries a "% source:" comment; "% TODO" marks a
+% number that does not exist yet.
+%
+% Needs the packages booktabs and hyperref (the report preamble loads them).
+
+\newcommand{\wsoneIntro}{%
+\section{Introduction}
+
+Stack Overflow answers millions of programming questions, and many are asked again in other words.
+Moderators close such questions as duplicates of an older one, but only after someone notices the
+match. Finding likely duplicates when a question is posted would save askers and answerers the same
+work twice. The difficulty is scale: comparing every new question with every old one costs a number
+of comparisons that grows with the square of the data.
+
+We study one system for this task: Jaccard similarity of question text, estimated with MinHash
+signatures, and found without comparing all pairs by locality-sensitive hashing (LSH), implemented
+by us in Spark. Each stage of the search (how text becomes sets, how long the signatures are, how
+LSH is set, how candidates are checked, what happens to very large buckets, how tags can narrow the
+search) is a design choice that one experiment settles (E1 to E8). The project answers four questions.
+
+\begin{description}
+  \item[Q1 (accuracy).] How many known duplicates does our system find, and how close does it come
+        to an exact search that checks every pair?
+  \item[Q2 (theory).] Do MinHash and LSH behave as the course theory predicts on real questions, and
+        which settings balance missed duplicates against wasted work?
+  \item[Q3 (scale).] What slows the system down as it grows (oversized buckets, data moved between
+        machines, memory), and how does run time change with more cores, a second machine and more data?
+  \item[Q4 (secondary).] Does grouping questions by frequent tag sets, found with the SON algorithm,
+        save work without losing many duplicates?
+\end{description}
+
+Our contributions are our own implementations of shingling, MinHash, LSH and SON; a streaming ETL for
+the 69~GB data dump; an evaluation against the duplicates that moderators have labelled; and a
+measured study of scale on two laptops run as a Spark cluster.
+}
+
+\newcommand{\wsoneDataset}{%
+\section{Dataset and data preparation}
+
+\paragraph{Source.} We use the Stack Exchange data dump, release 2026-09-30, from the Internet
+Archive (licence CC BY-SA 4.0). Stack Overflow is the target: its archive is 68,929,051,847 bytes
+% source: scripts/cluster/verify_archive.py (EXPECTED_ARCHIVE_SIZE)
+and we keep the questions tagged \texttt{python}.
+% TODO(#3): number of python questions and posts of Stack Overflow, from results/dataset_stats.md
+Super User, a small site in the same format, is used for development on the two lighter laptops.
+
+\paragraph{Super User.} The site has 516,669 questions and 753,503 answers, asked from 2008 to 2026
+% source: results/dataset_stats.md (Questions, Answers, Year table)
+(at most 47,106 questions in a year, in 2013).
+% source: results/dataset_stats.md (Year table)
+There are 90,843 links between posts, 14,641 of them marked as duplicates by moderators.
+% source: results/dataset_stats.md (Duplicate links, Linked links)
+Questions are 970 characters long on average; 35.4\% contain code, and 17,216 questions (3.3\%)
+% source: results/dataset_stats.md (Mean body length, Bodies with code, Questions without an owner)
+have no owner because the account was deleted. No question body is empty, and 3,212 questions
+% source: results/dataset_stats.md (Empty bodies, `python` questions)
+carry the \texttt{python} tag.
+
+\paragraph{Preparation.} The raw data is XML inside one archive that must not be unpacked. Our ETL
+streams \texttt{Posts.xml} and \texttt{PostLinks.xml} out of the archive, reads them row by row with
+constant memory, and writes three Parquet tables partitioned by year: \texttt{posts\_meta} (all
+questions and answers without text), \texttt{posts\_text} (question title and body, HTML kept) and
+\texttt{post\_links}. The whole Super User archive takes 51 seconds and gives 1,270,172 posts.
+% source: src/etl/README.md (Results on Super User); manifest of the run
+HTML is removed and the text is cut into word shingles later, in the similarity stage, so that
+experiment E1 can compare several choices.
+
+\paragraph{Ground truth.} The answer key is the set of duplicate links whose two questions are both
+in the data, with the newer question first. On Super User the 14,641 duplicate links give 14,639 pairs:
+% source: src/etl/README.md (Results on Super User)
+849 links (5.8\%) pointed from the older to the newer question and were turned around, and one link
+between questions with the same timestamp was dropped; none referred to a missing question.
+
+\paragraph{Limitations.} The answer key is incomplete: many true duplicates were never labelled, so
+the precision we measure is a lower bound, and the recall we measure counts only duplicates that a
+moderator found. Duplicate decisions are made by people and are not always consistent. Results on
+Super User need not carry over to Stack Overflow, which has a different mix of topics and far more
+code. Restricting Stack Overflow to \texttt{python} questions keeps the cluster run feasible but
+leaves duplicates of python questions that are tagged otherwise out of the search.
+}
+
+\newcommand{\wsoneDesign}{%
+\section{Experimental design}
+
+\paragraph{Questions evaluated.} For every duplicate question in the answer key, the system returns a
+ranked list of earlier questions (candidates). We count the question as found at rank $k$ if its
+labelled original is among the first $k$ candidates. Questions of the answer key with no candidate
+count as misses. Ties between equal similarities are broken by question id, so every run gives the same
+ranking.
+
+\paragraph{Metrics.} We report Recall@$K$ for $K = 1, 5, 10$, Precision@10, mean average precision
+(MAP), NDCG@10 with one relevant item per question, and the reduction ratio
+$1 - c / \binom{n}{2}$, the share of all pairs that LSH did not have to consider ($c$ candidate pairs among
+$n$ questions). Precision is a lower bound for the reason given above. Every run adds one row to a
+single table, \texttt{results/metrics.csv}, with its experiment, its settings and these values.
+
+\paragraph{Baselines.} Two baselines show what LSH gives up and what it saves: an exact all-pairs
+Jaccard search on nested samples of 10,000, 50,000 and, if time allows, 100,000 questions (E5), and
+Spark's built-in \texttt{MinHashLSH} on the same samples. The exact search also provides the true
+similarity of every pair, which experiment E3 uses to compare the measured chance of becoming a
+candidate with the theoretical curve $1 - (1 - s^r)^b$.
+
+\paragraph{Parameters.} Signature length, bands and rows, shingle size, the bucket strategy and the
+random seed of every sample are settings in \texttt{configs/}, so each result can be reproduced from
+its file. Scale is measured with the Spark event logs: total time, time per stage, shuffle volume,
+peak memory and the slowest task against the median (E8).
+
+\paragraph{Hardware and software.} Development and tests run in Spark local mode on Super User on two
+lighter laptops. Full-scale runs use two laptops as a standalone Spark cluster with HDFS (replication 2)
+under WSL2: an Intel Core i7-13650HX with 16~GB (master, NameNode, worker) and an AMD Ryzen 7 5800H with
+% source: docs/team/jubayerkhan.md; docs/cluster_setup.md; README.md (team table)
+16~GB (worker, DataNode). Software: Python 3.10 or newer, Spark 3.5.3 on Java 17, Hadoop 3.3, PyArrow
+% source: requirements.txt (pyspark==3.5.3); README.md (Getting started)
+for Parquet, and \texttt{7z} for the archive.
+}
+
+\newcommand{\wsoneContribution}{%
+Satyam Bhanot wrote the data foundation and the evaluation: the streaming ETL that turns the data dump
+into Parquet, the dataset profile, the answer key and the small sample files for the team, the evaluation
+library and its command line, the error analysis, the scaling test scripts and the event-log parser, and
+the repository conventions, contracts and automated checks (linter, tests in continuous integration, README
+and submission checks). He also wrote this report's introduction, dataset and experimental-design sections.
+}
