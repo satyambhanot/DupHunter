@@ -90,7 +90,9 @@ and the settings of every experiment are in `configs/`. The stages, in order:
    Then the profile, answer key and small exports as described in [src/etl/README.md](src/etl/README.md).
 2. **Similarity.** Shingles, MinHash signatures and LSH candidates:
    `python -m src.similarity.lsh --input data/parquet/signatures --output data/parquet/candidates -b 16 -r 8`
-   (see [src/similarity/README.md](src/similarity/README.md) for the earlier stages).
+   Shingles and MinHash are Python functions (`build_shingles`, `build_signatures`, see
+   [src/similarity/README.md](src/similarity/README.md)) without a command line yet, so until WS2 adds one the
+   signatures Parquet is written from Python; LSH then reads it as above.
 3. **Evaluation.** Candidates against the answer key, one row per run in `results/metrics.csv`, then the error
    analysis: see [src/evaluation/README.md](src/evaluation/README.md).
 4. **Scaling.** Run on the cluster by the cluster owners: [src/scaling/README.md](src/scaling/README.md).
