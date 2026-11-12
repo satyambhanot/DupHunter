@@ -1,0 +1,19 @@
+{
+  "seed": 0,
+  "options": [
+    {"name": "word1_title_body", "representation": "word", "k": 1, "fields": "title+body"},
+    {"name": "word2_title_body", "representation": "word", "k": 2, "fields": "title+body"},
+    {"name": "word3_title_body", "representation": "word", "k": 3, "fields": "title+body"},
+    {"name": "word4_title_body", "representation": "word", "k": 4, "fields": "title+body"},
+    {"name": "word5_title_body", "representation": "word", "k": 5, "fields": "title+body"},
+    {"name": "word1_title", "representation": "word", "k": 1, "fields": "title"},
+    {"name": "word2_title", "representation": "word", "k": 2, "fields": "title"},
+    {"name": "word3_title", "representation": "word", "k": 3, "fields": "title"},
+    {"name": "char5_title_body", "representation": "character", "k": 5, "fields": "title+body"},
+    {"name": "char5_title", "representation": "character", "k": 5, "fields": "title"},
+    {"name": "word1_title_body_code", "representation": "word", "k": 1, "fields": "title+body", "include_code": true},
+    {"name": "word2_title_body_code", "representation": "word", "k": 2, "fields": "title+body", "include_code": true},
+    {"name": "word1_title_body_drop5", "representation": "word", "k": 1, "fields": "title+body", "drop_common_share": 0.05},
+    {"name": "word2_title_body_drop5", "representation": "word", "k": 2, "fields": "title+body", "drop_common_share": 0.05}
+  ]
+}

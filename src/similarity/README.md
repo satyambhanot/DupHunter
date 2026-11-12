@@ -8,6 +8,7 @@
 | `minhash.py` | MinHash signatures, our own code | E2 (#28) |
 | `lsh.py` | LSH banding and candidate pairs, our own code | E3 (#13) |
 | `lsh_study.py` | S-curve theoretical vs. measured comparison, (b, r) parameter study | E3 (#13) |
+| `representation_study.py` | Exact-Jaccard comparison of text representations on labelled duplicate and random pairs; options in `configs/e1_representation.json` | E1 (#27) |
 
 **Our code vs. libraries:** all four are our own code. Spark `MinHashLSH` is used only as a baseline (see `src/evaluation`).
 
@@ -120,3 +121,14 @@ run_study(config_path="configs/e3_lsh.json", output_dir="results/e3_lsh")
 Settings, empirical S-curve data, and reports are saved to `results/e3_lsh/`.
 The selected baseline configuration for full-scale runs is `b=32, r=4`.
 
+## E1: text representation
+
+`representation_study.py` measures, with exact Jaccard only, how similar labelled duplicates are and how well each
+representation separates them from random pairs (median and quartiles, AUC, share of duplicates above 0.2 and 0.4,
+shingles per question). Run it on the `pairs_e1` export; the result and the choice for E2 and E3 (word 1-grams of the
+title) are in [results/e1_representation/README.md](../../results/e1_representation/README.md).
+
+```bash
+python -m src.similarity.representation_study --pairs data/exports/superuser/pairs_e1 \
+    --config configs/e1_representation.json --out results/e1_representation
+```
