@@ -7,8 +7,9 @@
 | `shingles.py` | Clean HTML, build shingle sets (word or character groups, optional removal of very common shingles) | E1 (#27) |
 | `minhash.py` | MinHash signatures, our own code | E2 (#28) |
 | `lsh.py` | LSH banding and candidate pairs, our own code | E3 (#13) |
+| `lsh_study.py` | S-curve theoretical vs. measured comparison, (b, r) parameter study | E3 (#13) |
 
-**Our code vs. libraries:** all three are our own code. Spark `MinHashLSH` is used only as a baseline (see `src/evaluation`).
+**Our code vs. libraries:** all four are our own code. Spark `MinHashLSH` is used only as a baseline (see `src/evaluation`).
 
 ## Shingles
 
@@ -98,3 +99,23 @@ across any `bands_per_pass` setting.
 ```bash
 python -m src.similarity.lsh --input data/parquet/signatures --output data/parquet/candidates -b 16 -r 8
 ```
+
+## LSH Parameter Study (Experiment E3)
+
+`lsh_study.py` analyzes (b, r) configurations for signature length $n = b \cdot r = 128$.
+It evaluates the predicted S-curve $1 - (1 - s^r)^b$ against empirical collision rates,
+determines the 50% detection threshold, and benchmarks settings configured in `configs/e3_lsh.json`.
+
+```python
+from src.similarity.lsh_study import s_curve, measured_curve, lsh_threshold, run_study
+
+# S-curve reference point
+p = s_curve(0.5, b=32, r=4)  # ~0.8732
+
+# Run full parameter study
+run_study(config_path="configs/e3_lsh.json", output_dir="results/e3_lsh")
+```
+
+Settings, empirical S-curve data, and reports are saved to `results/e3_lsh/`.
+The selected baseline configuration for full-scale runs is `b=32, r=4`.
+
