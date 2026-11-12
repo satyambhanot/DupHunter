@@ -32,11 +32,15 @@ def _by_hash(df: DataFrame, columns: list[str], seed: int) -> DataFrame:
     return df.orderBy(F.xxhash64(*columns, F.lit(seed)), *columns)
 
 
-def export_python_tags(posts_meta: DataFrame) -> DataFrame:
-    """Return ``(post_id, tags)`` of every question tagged ``python``."""
-    return posts_meta.filter(
-        (F.col("post_type") == 1) & F.array_contains("tags", PYTHON_TAG)
-    ).select("post_id", "tags")
+def export_python_tags(posts_meta: DataFrame, tag: str | None = PYTHON_TAG) -> DataFrame:
+    """Return ``(post_id, tags)`` of every question tagged ``tag`` (all questions if empty).
+
+    Super User has no ``python`` tag; for development there, pass an empty tag to use all questions.
+    """
+    questions = posts_meta.filter(F.col("post_type") == 1)
+    if tag:
+        questions = questions.filter(F.array_contains("tags", tag))
+    return questions.select("post_id", "tags")
 
 
 def make_sample(questions: DataFrame, pairs: DataFrame, n: int, seed: int) -> DataFrame:
@@ -134,6 +138,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--answer-key", required=True, help="answer key Parquet (contract C6)")
     parser.add_argument("--output", required=True, help="directory for the three exports")
     parser.add_argument("--config", default="configs/sample.json", help="seed and sizes")
+    parser.add_argument(
+        "--tag",
+        default=PYTHON_TAG,
+        help="keep questions with this tag; empty keeps all (Super User has no python tag)",
+    )
     parser.add_argument("--master", default="local[*]", help="Spark master")
     return parser.parse_args(argv)
 
@@ -147,14 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     out = args.output.rstrip("/")
     key = spark.read.parquet(args.answer_key)
     questions = spark.read.parquet(f"{root}/posts_text")
-    python_questions = questions.join(
-        export_python_tags(spark.read.parquet(f"{root}/posts_meta")).select("post_id"),
-        "post_id",
-        "left_semi",
-    )
-    export_python_tags(spark.read.parquet(f"{root}/posts_meta")).write.mode("overwrite").parquet(
-        f"{out}/python_tags"
-    )
+    tagged = export_python_tags(spark.read.parquet(f"{root}/posts_meta"), args.tag)
+    python_questions = questions.join(tagged.select("post_id"), "post_id", "left_semi")
+    tagged.write.mode("overwrite").parquet(f"{out}/python_tags")
     make_sample(python_questions, key, config["sample_size"], config["seed"]).write.mode(
         "overwrite"
     ).parquet(f"{out}/python_sample")

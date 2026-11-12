@@ -74,7 +74,8 @@ python -m src.etl.exports --parquet-root data/parquet/superuser \
   questions are in `posts_text`, newer question first. Links with a missing question or equal timestamps are
   dropped; the counts are printed.
 - `exports.py` writes `python_tags`, `python_sample` and `pairs_e1` (deterministic, seed and sizes in
-  `configs/sample.json`). Share them on the team drive; never commit them.
+  `configs/sample.json`). Super User has no `python` tag, so for development there add `--tag ""` to use all
+  questions. Share the files on the team drive; never commit them.
 
 ## Our code vs. libraries
 
