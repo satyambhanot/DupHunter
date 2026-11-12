@@ -127,3 +127,10 @@ def test_config_is_frozen_and_validated():
         ShingleConfig(k=0)
     with pytest.raises(ValueError, match="between 0 and 1"):
         ShingleConfig(drop_common_share=1.1)
+
+
+def test_escaped_angle_brackets_do_not_delete_text(spark):
+    """Entities such as &lt; and &gt; in prose must not be read as tags after decoding."""
+    rows = spark.sql("SELECT 1 AS post_id, '' AS title, 'if a &lt; b then c &gt; d' AS body")
+    row = build_shingles(rows, ShingleConfig(k=1)).collect()[0]
+    assert len(row.shingles) == 6  # if, a, b, then, c, d

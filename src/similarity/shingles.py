@@ -81,7 +81,10 @@ def _empty_text(column: Column) -> Column:
 
 
 def _clean_html(column: Column) -> Column:
-    decoded = column
+    # Strip the tags first and decode the entities afterwards. Decoding first would turn "a &lt; b"
+    # into "a < b", and the tag pattern would then delete everything up to the next ">".
+    stripped = F.regexp_replace(column, _HTML_TAG, " ")
+    decoded = stripped
     for entity, replacement in (
         (r"(?i)&nbsp;|&#160;", " "),
         (r"(?i)&lt;", "<"),
@@ -91,7 +94,7 @@ def _clean_html(column: Column) -> Column:
         (r"(?i)&amp;", "&"),
     ):
         decoded = F.regexp_replace(decoded, entity, replacement)
-    return F.trim(F.regexp_replace(decoded, _HTML_TAG, " "))
+    return F.trim(decoded)
 
 
 def _hash_shingles(shingles: Column) -> Column:
