@@ -10,6 +10,7 @@
 | `lsh_study.py` | S-curve theoretical vs. measured comparison, (b, r) parameter study | E3 (#13) |
 | `representation_study.py` | Exact-Jaccard comparison of text representations on labelled duplicate and random pairs; options in `configs/e1_representation.json` | E1 (#27) |
 | `minhash_study.py` | MinHash accuracy against `sqrt(J(1-J)/n)` and cost for signature lengths 32 to 256 | E2 (#28) |
+| `lsh_measure.py` | E3 on real questions: measured against predicted S-curve and the recall/candidates trade-off of each (b, r) | E3 (#13) |
 
 **Our code vs. libraries:** all four are our own code. Spark `MinHashLSH` is used only as a baseline (see `src/evaluation`).
 
@@ -143,4 +144,16 @@ See [results/e2_signature/README.md](../../results/e2_signature/README.md).
 ```bash
 python -m src.similarity.minhash_study --pairs data/exports/superuser/pairs_e1 \
     --posts data/exports/superuser/python_sample --out results/e2_signature
+```
+
+## E3 on real questions
+
+`lsh_measure.py` measures the S-curve on labelled pairs and runs LSH with three settings on a Super User sample, scoring the
+candidates with `src.evaluation.evaluate`. Result and choice (b = 32, r = 4; b = 64, r = 2 as the high-recall comparison):
+[results/e3_lsh_real/README.md](../../results/e3_lsh_real/README.md).
+
+```bash
+python -m src.similarity.lsh_measure --pairs data/exports/superuser/pairs_e1 \
+    --posts data/exports/superuser/python_sample --answer-key data/answer_key/superuser \
+    --out results/e3_lsh_real
 ```
