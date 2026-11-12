@@ -67,7 +67,7 @@ All changes go through pull requests into `dev`, and the linter and tests must p
 ## Getting started
 
 Requirements: Python 3.10 or newer and Java 17 (Spark 3.5.3 runs on it). The cluster uses Hadoop 3.3.x and
-Spark 3.5.x (see [docs/cluster_setup.md](docs/cluster_setup.md) once it exists). On Windows use WSL2 and keep
+Spark 3.5.x (see [docs/cluster_setup.md](docs/cluster_setup.md)). On Windows use WSL2 and keep
 the project inside the WSL file system.
 
 ```bash

@@ -1,6 +1,6 @@
 # Development setup for the lighter laptops
 
-Satyam's and Iesrat's laptops do not have the compute for the full Stack Overflow data, so they develop and test on **Super User** (about 517,000 questions) in Spark local mode. Jubayer's and Navjot's laptops form the cluster and run everything at full scale (see [cluster_setup.md](cluster_setup.md) once it exists).
+Satyam's and Iesrat's laptops do not have the compute for the full Stack Overflow data, so they develop and test on **Super User** (about 517,000 questions) in Spark local mode. Jubayer's and Navjot's laptops form the cluster and run everything at full scale (see [cluster_setup.md](cluster_setup.md)).
 
 ## The rule: write once, run anywhere
 
