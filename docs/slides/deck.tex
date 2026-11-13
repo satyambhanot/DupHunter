@@ -87,9 +87,9 @@
   \begin{itemize}
     \item \textbf{Evaluation Metrics:}
       \begin{itemize}
-        \item \textbf{Recall@K ($K \in \{5, 10\}$):} Fraction of true duplicate links retrieved in top $K$ candidates.
-        \item \textbf{Precision@K:} Fraction of retrieved candidates that are true duplicates (conservative lower bound).
-        \item \textbf{Reduction Ratio (RR):} Fraction of non-duplicate pairs eliminated by LSH filtering:
+        \item \textbf{Recall@K ($K \in \{1, 5, 10\}$):} per duplicate question $q$ with originals $R_q$: $|\text{top-}K \cap R_q| / |R_q|$, averaged over all such questions (macro average).
+        \item \textbf{Precision@K:} $|\text{top-}K \cap R_q| / K$ (divided by $K$ even with fewer candidates), averaged the same way; a lower bound, because unlabelled duplicates count as misses.
+        \item \textbf{Reduction Ratio (RR):} share of \emph{all} $N(N-1)/2$ question pairs that LSH does not have to compare:
           \[ RR = 1 - \frac{|\text{Retrieved Candidates}|}{N(N-1)/2} \]
         \item \textbf{Ranking Quality:} Mean Average Precision (MAP) and NDCG@10 for order-aware evaluation.
       \end{itemize}
