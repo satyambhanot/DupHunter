@@ -1,0 +1,8 @@
+spark.master spark://${MASTER_IP}:7077
+spark.eventLog.enabled true
+spark.eventLog.dir hdfs://${MASTER_IP}:9000/spark-logs
+spark.worker.cores 8
+spark.worker.memory 7g
+spark.driver.host ${MASTER_IP}
+spark.driver.port 7079
+spark.blockManager.port 7080
