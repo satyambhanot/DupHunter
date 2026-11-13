@@ -40,9 +40,11 @@ The mean absolute difference over these bins is 0.027, 0.031 and 0.009 for the t
    each curve. The measured share is a little below the prediction in the upper bins; the prediction is taken at the middle
    of a bin, but the similarities inside a bin are skewed towards its lower end, and the bins above 0.4 hold only 40 to 85
    pairs (about 5 points of sampling error). We did not test a systematic effect of the hash family.
-2. **Recall is limited by the data, not by LSH.** Most labelled duplicates have a low Jaccard: E1 found that with title
+2. **Recall is low because duplicates share few words.** Most labelled duplicates have a low Jaccard: E1 found that with title
    words 35% of them reach 0.2 and only 8.9% reach 0.4. Setting the LSH threshold at 0.12 (b = 64, r = 2) finds 30% of
-   labelled duplicates in the first 10 candidates, close to that bound; setting it at 0.42 finds 11.5%; at 0.71 almost none.
+   labelled duplicates in the first 10 candidates, setting it at 0.42 finds 11.5%, and at 0.71 almost none. These shares
+   describe exact search at fixed cutoffs; LSH also collides with some probability below its threshold, so they are not an
+   upper bound on LSH recall. The exact-search recall at the same cutoffs is measured in E5 (#10).
 3. **The cost of recall is steep.** b = 64, r = 2 yields 3.9 million candidates for 9,583 questions, 8.5% of all pairs, which
    is a reduction ratio of only 0.915; the candidates grow with the square of the data, so at the 2.2 million questions of the
    python subset this setting is not feasible. b = 32, r = 4 keeps 0.2% of all pairs and runs in 15 s.
@@ -53,7 +55,7 @@ The mean absolute difference over these bins is 0.027, 0.031 and 0.009 for the t
   times that of b = 16, r = 8) and cheap enough to scale (reduction ratio 0.998).
 - **b = 64, r = 2** answers Q2's other end: it shows how much recall exists at a low threshold (30%) and what it costs.
   Use it on samples only.
-- Recall on this data stays low for every setting because duplicates share few words (E1). Q1 should therefore be reported
+- Recall stays low for every setting, and duplicates share few words (E1); we have not separated the two causes. Q1 should therefore be reported
   *relative to an exact search at the same similarity threshold* (E5), as the proposal says, besides the absolute recall.
 
 ## Correction to the merged simulation
