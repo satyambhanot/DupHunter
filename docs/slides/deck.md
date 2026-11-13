@@ -20,14 +20,14 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 
 <!-- Presenter: Satyam Bhanot | Allocated Time: 0:00 - 0:50 -->
 ## 1. Problem Formulation: Duplicate Questions on Stack Overflow
-- **Context:** Over 23 million questions; developers constantly submit identical technical queries with diverse wording.
+- **Context:** Stack Overflow holds millions of questions; developers keep asking the same thing in different words. [TODO: exact question count after the Stack Overflow profile (#31)]
 - **Why It Matters:** Community fragmentation, redundant expert effort, delayed answers for developers.
 - **The Computational Bottleneck:**
   - Pairwise comparison across $N = 2{,}200{,}000$ questions requires:
     $$\frac{N(N-1)}{2} \approx 2.42 \times 10^{12} \text{ comparisons (quadratic explosion)}$$
-  - At 10,000 comparisons/sec, an exhaustive search requires **7.6 years of continuous compute**.
+  - At 10,000 comparisons/sec, an exhaustive search needs about **7.7 years of continuous compute**.
 - **Project Objective:** Build a sub-quadratic, distributed candidate generation pipeline on Apache Spark with bounded recall loss.
-- **Figure Citation:** Quadratic vs. LSH comparison cost (`results/e5_baselines/`)
+- **Figure Citation:** TODO (not yet produced): Quadratic vs. LSH comparison cost (`results/e5_baselines/`)
 
 ---
 
@@ -41,7 +41,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 - **Streaming ETL Pipeline (Contract C1):**
   - Streaming XML decompression (`7z x -so`) directly into year-partitioned Parquet tables without unpacking to disk.
   - Output tables: `posts_meta`, `posts_text`, `post_links`.
-- **Figure Citation:** Streaming ETL throughput (`results/dataset_stats.md`)
+- **Figure Citation:** Dataset statistics (`results/dataset_stats.md`)
 
 ---
 
@@ -51,10 +51,10 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - Extracted from `post_links` with `LinkTypeId = 3` (duplicate relationship).
   - Enforced directional validity: the newer duplicate question (`post_id`) must target an existing earlier question (`cand_id`).
 - **Data Observations:**
-  - Over $4.2\%$ of questions are confirmed duplicates.
+  - About $2.6\%$ of Super User questions are labelled duplicates (13,325 of 516,669; `results/dataset_stats.md`). [TODO: share on the python subset (#31)]
   - Asymmetric relationship: popular foundational questions (e.g. *"How to iterate over a dictionary"*) attract hundreds of duplicate references.
   - Missing owners or deleted questions filtered cleanly during ingestion.
-- **Figure Citation:** Duplicate link distribution (`results/dataset_stats.md`)
+- **Figure Citation:** Questions per year (`results/dataset/questions_per_year.png`)
 
 ---
 
@@ -64,7 +64,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - **Recall@K (K=5, 10):** Fraction of true duplicate links retrieved in top $K$ candidates.
   - **Precision@K:** Fraction of retrieved candidates that are true duplicates (lower bound).
   - **Reduction Ratio (RR):** Fraction of non-duplicate pairs eliminated by LSH filtering:
-    $$RR = 1 - \frac{|\text{Retrieved Candidates}|}{N(N-1)/2} > 99.99\%$$
+    $$RR = 1 - \frac{|\text{Retrieved Candidates}|}{N(N-1)/2}$$
   - **Ranking Quality:** Mean Average Precision (MAP) and NDCG@10 for order-aware evaluation.
 - **Evaluation Architecture:** Single unified evaluation CLI (`src/evaluation/evaluate.py`) reading Contract C4/C5 candidates.
 - **Figure Citation:** Metric evaluation pipeline (`src/evaluation/README.md`)
@@ -93,7 +93,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - Evaluated 14 options (word 1--5 grams, char 5-grams, title vs. title+body, common-shingle pruning).
   - Highest AUC: Word 1-grams title+body with common 5% dropped (AUC = 0.957).
   - **Pipeline Choice:** **Word 1-grams, title only** (`word1_title`): 35.2% duplicate pairs reach $J \ge 0.2$; random median 0.000; only 9.6 shingles per question.
-- **Figure Citation:** Shingle representation comparison (`results/e1_representation/`)
+- **Figure Citation:** Jaccard of duplicate and random pairs for the best options (`results/e1_representation/best_options_histograms.png`)
 
 ---
 
@@ -105,9 +105,9 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 - **Signature Length Experiment (E2):**
   - Tested lengths $n \in \{32, 64, 128, 256\}$.
   - Standard error follows theoretical bound $\sigma = \sqrt{\frac{s(1-s)}{n}}$.
-  - **$n = 128$ selected:** Jaccard standard error is under $\pm 0.044$ at $s=0.5$ with 1 KB memory footprint per question.
+  - **$n = 128$ selected:** the measured spread at $s=0.5$ is 0.049 (theory 0.044) with signatures of 1 KB per question.
 - **Prefix Stability:** Independent random generator guarantees shorter signatures are strict prefixes of longer ones.
-- **Figure Citation:** Signature length vs. estimation variance (`tests/similarity/test_minhash.py`)
+- **Figure Citation:** Spread of the estimate against theory (`results/e2_signature/accuracy.png`)
 
 ---
 
@@ -119,7 +119,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - `high_precision` ($b=16, r=8$): Threshold $t \approx 0.707$, 153 candidates, Recall@10 = 1.7%, 6 s.
   - **`balanced` ($b=32, r=4$):** Threshold $t \approx 0.420$, 73,889 candidates, 99.8% reduction ratio, Recall@10 = 11.5% (**Chosen Baseline**).
   - `high_recall` ($b=64, r=2$): Threshold $t \approx 0.125$, 3.89M candidates, 91.5% reduction ratio, Recall@10 = 29.8% (sample benchmark).
-- **Theory vs. Measurement:** S-curve predictions match measurements within 1 to 3 percentage points across all bins.
+- **Theory vs. Measurement:** S-curve measurements follow the predictions (mean difference 1 to 3 points per setting; up to 10 points in single bins).
 - **Figure Citation:** S-curves: predicted vs. measured (`results/e3_lsh_real/s_curves.png`)
 
 ---
@@ -131,8 +131,8 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - A bucket with $M = 10{,}000$ posts generates $\frac{10000 \times 9999}{2} \approx 50\text{ million pairs}$ (driver OOM).
 - **The Size-Limit Policy (Contract Hook 1):**
   - `--bucket-policy size_limit`: Drops buckets where $|B| > 1{,}000$ items and logs the event.
-  - Experiment E7 demonstrated dropping the top $0.02\%$ largest buckets eliminated $94\%$ of candidate pair explosion while losing less than $0.8\%$ of true duplicate links.
-- **Figure Citation:** Bucket size distribution before and after pruning (`results/e7_buckets/`)
+  - [TODO: result of the E7 bucket comparison, from #30: share of candidate pairs removed and share of true duplicates lost]
+- **Figure Citation:** TODO (not yet produced): Bucket size distribution before and after pruning (`results/e7_buckets/`)
 
 ---
 
@@ -143,9 +143,9 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - `--groups`: Maps questions to frequent tag combinations (SON algorithm itemsets) or primary tags.
   - Group identifiers prefix bucket hash keys: items in different groups never collide in buckets.
 - **Empirical Impact:**
-  - Decreases candidate comparisons by $3.4\times$ on the full Python subset.
-  - Retains $98.1\%$ Recall@10 while delivering a $2.8\times$ speedup during candidate generation.
-- **Figure Citation:** Tag blocking candidate reduction (`results/e6_blocking/`)
+  - [TODO: E6 candidate reduction of tag blocking on the python subset, from #17]
+  - [TODO: E6 Recall@10 and speed-up with blocking, from #17]
+- **Figure Citation:** TODO (not yet produced): Tag blocking candidate reduction (`results/e6_blocking/`)
 
 ---
 
@@ -158,7 +158,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - `estimated`: Rank ordered by MinHash signature overlap.
   - `exact_jaccard`: Re-ranked by exact Jaccard similarity.
   - `tfidf_cosine`: Re-ranked using TF-IDF token weights (stretch).
-- **Results:** Exact Jaccard ranking elevates NDCG@10 from 0.74 to 0.88, removing false-positive hash collisions from top ranks.
+- **Results:** Exact Jaccard re-ranking changes the top-1 candidate for 17.7% of queries (top-1 agreement 82.3%, mean rank shift 0.94; `results/e4_verification/ranking_comparison.csv`). [TODO: Recall@K, MAP and NDCG of the rankers, requested on #75]
 - **Figure Citation:** Ranking strategy comparison (`results/e4_verification/ranking_comparison.csv`)
 
 ---
@@ -166,13 +166,13 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 <!-- Presenter: Md Jubayer Khan | Allocated Time: 10:30 - 11:30 -->
 ## 12. Cluster Topology & Distributed Deployment
 - **Physical Testbed Topology:**
-  - 2 commodity developer laptops connected via dedicated Gigabit Ethernet switch.
-  - **Node A (Intel i7-13650HX, 14 cores, 16 GB):** HDFS NameNode, Spark Master, Spark Worker (8 cores, 10 GB executor).
-  - **Node B (AMD Ryzen 7 5800H, 8 cores, 16 GB):** HDFS DataNode, Spark Worker (6 cores, 10 GB executor).
+  - 2 commodity developer laptops on the same local network (see `docs/cluster_setup.md`).
+  - **Node A (Intel i7-13650HX, 14 cores, 16 GB):** HDFS NameNode, Spark Master, Spark Worker (8 cores, 8 GB).
+  - **Node B (AMD Ryzen 7 5800H, 8 cores, 16 GB):** HDFS DataNode, Spark Worker (8 cores, 7 GB; `configs/cluster/laptop_b/`).
 - **Cluster Software Stack:**
-  - Apache Spark 3.5.2 Standalone, Hadoop 3.3 HDFS, OpenJDK 17, Python 3.10+.
+  - Apache Spark 3.5.3 Standalone, Hadoop 3.3 HDFS, OpenJDK 17, Python 3.10+.
 - **Execution Pipeline:** HDFS streamed storage $\to$ distributed shingling $\to$ MinHash $\to$ LSH $\to$ verification.
-- **Figure Citation:** Cluster hardware configuration (`docs/proposal/ENSF612_Project_Proposal_v3.pdf`)
+- **Figure Citation:** Cluster hardware (`docs/team/`, `configs/cluster/`)
 
 ---
 
@@ -183,10 +183,10 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - **Spark MLlib `MinHashLSH`:** Built-in Spark ML library implementation.
   - **DupHunter:** Our custom MapReduce pipeline.
 - **Comparison Findings:**
-  - Exact search crashes beyond 50k questions due to $O(N^2)$ quadratic complexity.
-  - Spark MLlib `MinHashLSH` only supports single-dimension table hashing (OR-only approximation), generating massive false positives.
-  - **DupHunter is $2.3\times$ faster** than Spark `MinHashLSH` while generating **$4.1\times$ fewer candidates** at equivalent recall.
-- **Figure Citation:** Runtime & memory baselines (`results/e5_baselines/ours_vs_spark.md`)
+  - [TODO: where exact search stops being feasible, from the E5 run (#10)]
+  - [TODO: observation about Spark `MinHashLSH`, from the E5 run (#11)]
+  - [TODO: DupHunter versus Spark `MinHashLSH` runtime and candidates at equal recall, from E5 (#10, #11)]
+- **Figure Citation:** TODO (not yet produced): Runtime & memory baselines (`results/e5_baselines/ours_vs_spark.md`)
 
 ---
 
@@ -194,12 +194,12 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 ## 14. Scalability Analysis: Data, Cores, and Nodes (Experiment E8)
 - **Data Scaling (10% to 100% of 2.2M questions):**
   - Shingling and MinHash scale strictly linearly $O(N)$.
-  - Candidate generation scales as $O(N^{1.15})$, confirming sub-quadratic performance.
+  - [TODO: scaling exponent from the data-size test, E8 (#43)]
 - **Core Speedup (1, 2, 4, 8, 14 cores):**
-  - Map-only MinHash achieves **$11.2\times$ speedup on 14 cores** ($80\%$ parallel efficiency).
-  - Shuffle-bound LSH grouping achieves **$78\%$ parallel efficiency**.
-- **Cluster Speedup:** 2 nodes deliver **$1.72\times$ speedup** over a single laptop, bound primarily by 1 Gbps network shuffle.
-- **Figure Citation:** Strong and weak scaling plots (`results/e8_scaling/scaling_results.csv`)
+  - [TODO: core-count speed-up and efficiency, E8 (#32)]
+  - [TODO: LSH grouping efficiency, E8 (#32)]
+- **Cluster speed-up:** [TODO: speed-up of two nodes over one laptop, E8 (#32)]
+- **Figure Citation:** TODO (not yet produced): Strong and weak scaling plots (`results/e8_scaling/scaling_results.csv`)
 
 ---
 
@@ -208,18 +208,18 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 - **Challenge 1: Partition Memory Skew & Executor OOM**
   - *Fix:* Integrated `size_limit(1000)` policy upstream before distributed shuffle boundaries.
 - **Challenge 2: Garbage Collection Overhead in PySpark**
-  - *Fix:* Replaced Python object tuples with primitive integer array buffers in `mapPartitions` and configured `spark.memory.fraction = 0.8`.
+  - *Fix:* [TODO: describe the real fix and its measurement from the E8 runs (#32)]
 - **Challenge 3: Directional Duplicate Ground Truth**
   - *Fix:* Enforced asymmetric question ordering (`post_id` > `cand_id`) to reflect genuine Stack Overflow duplicate linkage semantics.
-- **Figure Citation:** Memory and GC profile (`results/e8_scaling/executor_gc.csv`)
+- **Figure Citation:** TODO (not yet produced): Memory and GC profile (`results/e8_scaling/executor_gc.csv`)
 
 ---
 
 <!-- Presenter: All Members | Allocated Time: 14:15 - 15:00 -->
 ## 16. Summary, Impact & Q&A Readiness
 - **Core Results:**
-  - Successfully indexed 2.2 million Python questions in **38 minutes** on dual-laptop commodity hardware.
-  - Achieved **$85.4\%$ Recall@10** while filtering out over **$99.99\%$** of all possible pairwise comparisons.
+  - [TODO: run time of the full python subset, from #31]
+  - [TODO: Recall@10 and reduction ratio of the full run, #31]. On Super User with `b=32, r=4` we measured Recall@10 = 11.5% and reduction ratio 0.998 (`results/e3_lsh_real/`).
 - **Course Concepts Mastered:** Locality-Sensitive Hashing, MinHash, Universal Hash Families, S-Curves, MapReduce Partitioning, RDD Optimization, Distributed Scalability.
 - **Reproducibility:** Fully automated via frozen JSON configs and clean CLI entry points.
 - **Ready for Defense & Q&A!**
