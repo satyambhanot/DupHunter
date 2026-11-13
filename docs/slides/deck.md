@@ -61,9 +61,9 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 <!-- Presenter: Satyam Bhanot | Allocated Time: 2:30 - 3:30 -->
 ## 4. Evaluation Methodology & Metrics
 - **Metric Definitions:**
-  - **Recall@K (K=5, 10):** Fraction of true duplicate links retrieved in top $K$ candidates.
-  - **Precision@K:** Fraction of retrieved candidates that are true duplicates (lower bound).
-  - **Reduction Ratio (RR):** Fraction of non-duplicate pairs eliminated by LSH filtering:
+  - **Recall@K (K=1, 5, 10):** per duplicate question $q$ with originals $R_q$: $|\text{top-}K \cap R_q| / |R_q|$, averaged over all such questions (macro average).
+  - **Precision@K:** $|\text{top-}K \cap R_q| / K$ (divided by $K$ even when fewer candidates exist), averaged the same way; a lower bound, because unlabelled duplicates count as misses.
+  - **Reduction Ratio (RR):** share of **all** $N(N-1)/2$ question pairs that LSH does not have to compare:
     $$RR = 1 - \frac{|\text{Retrieved Candidates}|}{N(N-1)/2}$$
   - **Ranking Quality:** Mean Average Precision (MAP) and NDCG@10 for order-aware evaluation.
 - **Evaluation Architecture:** Single unified evaluation CLI (`src/evaluation/evaluate.py`) reading Contract C4/C5 candidates.
