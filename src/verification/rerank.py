@@ -45,7 +45,7 @@ def compute_idf(corpus_tokens: dict[int, list[str]]) -> dict[str, float]:
     return {term: math.log((n_docs + 1.0) / (df + 1.0)) + 1.0 for term, df in doc_freq.items()}
 
 
-def _compute_idf_spark(posts: DataFrame, min_df: int = 1) -> dict[str, float]:
+def _compute_idf_spark(posts: DataFrame, min_df: int = 2) -> dict[str, float]:
     """Compute smooth IDF weights in Spark without collecting full post texts."""
     n_docs = posts.select("post_id").distinct().count()
     if n_docs == 0:
@@ -147,7 +147,7 @@ class TfidfRanker:
         self,
         posts: DataFrame | None = None,
         candidate_pool: int = 50,
-        min_df: int = 1,
+        min_df: int = 2,
     ) -> None:
         self.posts = posts
         self.candidate_pool = candidate_pool
@@ -260,8 +260,9 @@ def compare_with_tfidf(
     top_k: int = 10,
     min_jaccard: float | None = None,
     candidate_pool: int = 50,
+    min_df: int = 2,
 ) -> list[dict[str, object]]:
-    """Compare ``estimated``, ``exact_jaccard``, and ``tfidf`` rankings."""
+    """Compare ``estimated``, ``exact_jaccard``, ``tfidf_title``, and ``tfidf`` rankings."""
     from src.evaluation.evaluate import evaluate
     from src.verification.rankers import RANKERS
 
@@ -275,18 +276,31 @@ def compare_with_tfidf(
         .rank(candidates, shingles=shingles, top_k=top_k, min_jaccard=min_jaccard)
         .cache()
     )
+    comparisons: list[tuple[str, DataFrame]] = [
+        ("estimated", est_df),
+        ("exact_jaccard", exact_df),
+    ]
+    if {"title", "body"} <= set(posts.columns):
+        tfidf_title_df = (
+            TfidfRanker(
+                posts=posts.select("post_id", "title"),
+                candidate_pool=candidate_pool,
+                min_df=min_df,
+            )
+            .rank(candidates, shingles=shingles, top_k=top_k, min_jaccard=min_jaccard)
+            .cache()
+        )
+        comparisons.append(("tfidf_title", tfidf_title_df))
+
     tfidf_df = (
-        TfidfRanker(posts=posts, candidate_pool=candidate_pool)
+        TfidfRanker(posts=posts, candidate_pool=candidate_pool, min_df=min_df)
         .rank(candidates, shingles=shingles, top_k=top_k, min_jaccard=min_jaccard)
         .cache()
     )
+    comparisons.append(("tfidf", tfidf_df))
 
     rows: list[dict[str, object]] = []
-    for method_name, df in [
-        ("estimated", est_df),
-        ("exact_jaccard", exact_df),
-        ("tfidf", tfidf_df),
-    ]:
+    for method_name, df in comparisons:
         stats = df.agg(
             F.countDistinct("dup_id").alias("n_queries"),
             F.count("*").alias("n_ranked"),
@@ -323,6 +337,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", required=True)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--candidate-pool", type=int, default=50)
+    parser.add_argument("--min-df", type=int, default=2)
     parser.add_argument("--min-jaccard", type=float, default=None)
     parser.add_argument("--master", default="local[*]")
     return parser.parse_args(argv)
@@ -347,6 +362,7 @@ def main(argv: list[str] | None = None) -> None:
             top_k=args.top_k,
             min_jaccard=args.min_jaccard,
             candidate_pool=args.candidate_pool,
+            min_df=args.min_df,
         )
         out = Path(args.output)
         out.parent.mkdir(parents=True, exist_ok=True)

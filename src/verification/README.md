@@ -21,10 +21,12 @@ python -m src.verification.verify --input data/candidates --shingles data/shingl
 ## Using TF-IDF Re-ranking (#40)
 
 ```bash
-python -m src.verification.rerank --input data/candidates --shingles data/shingles \
-    --posts data/posts_text --answer-key data/answer_key \
+python -m src.verification.rerank --input <candidates_parquet> --shingles <shingles_parquet> \
+    --posts <posts_text_parquet> --answer-key <answer_key_parquet> \
     --output results/e4_verification/tfidf_comparison.csv --master local[*]
 ```
+
+Scale note: `_compute_idf_spark` computes document frequencies in Spark (default `min_df=2`), while the top-50 candidate pool per query is collected to the driver and sorted in Python. Run TF-IDF re-ranking on a sample or on queries with labelled duplicates rather than millions of unlabelled queries.
 
 ## Tests
 

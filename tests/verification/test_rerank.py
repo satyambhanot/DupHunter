@@ -77,7 +77,7 @@ class TestTfidfRanker:
         # Pool=2 by exact Jaccard keeps 103 (1.0) and 102 (0.75); TF-IDF ties -> exact Jaccard wins
         assert [r["cand_id"] for r in rows] == [103, 102]
 
-    def test_compare_with_tfidf_returns_three_methods(self, spark) -> None:
+    def test_compare_with_tfidf_returns_methods(self, spark) -> None:
         posts = spark.createDataFrame(
             [
                 (1, "pandas dataframe", ""),
@@ -99,10 +99,11 @@ class TestTfidfRanker:
             [(1, 101, "2020-01-01")], "dup_id long, original_id long, created string"
         )
         rows = compare_with_tfidf(candidates, shingles, posts, answer_key=answer_key, n_questions=3)
-        assert [r["method"] for r in rows] == ["estimated", "exact_jaccard", "tfidf"]
+        assert [r["method"] for r in rows] == ["estimated", "exact_jaccard", "tfidf_title", "tfidf"]
         by_method = {r["method"]: r for r in rows}
         assert by_method["estimated"]["recall@1"] == 0.0
         assert by_method["exact_jaccard"]["recall@1"] == 1.0
+        assert by_method["tfidf_title"]["recall@1"] == 1.0
         assert by_method["tfidf"]["recall@1"] == 1.0
         assert by_method["tfidf"]["ndcg@10"] == 1.0
 
