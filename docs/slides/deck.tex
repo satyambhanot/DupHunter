@@ -69,13 +69,13 @@
     \item \textbf{Ground Truth Duplicates (Contract C6):}
       \begin{itemize}
         \item Extracted from \texttt{post\_links} with \texttt{LinkTypeId = 3} (duplicate relationship).
-        \item Enforced directional validity: the newer duplicate question (\texttt{post\_id}) must target an existing earlier question (\texttt{cand\_id}).
+        \item Oriented by creation time (\texttt{answer\_key.py}): \texttt{dup\_id} is the newer question, \texttt{original\_id} the older one; links with equal timestamps are dropped.
       \end{itemize}
     \item \textbf{Data Observations:}
       \begin{itemize}
         \item About $2.6\%$ of Super User questions are labelled duplicates (13,325 of 516,669). \textbf{[TODO: python subset, \#31]}
-        \item Asymmetric relationship: popular foundational questions attract hundreds of duplicate references.
-        \item Missing owners or deleted questions filtered cleanly during ingestion.
+        \item Asymmetric relationship: a few original questions attract many duplicates. \textbf{[TODO: top originals by number of duplicates, \#31]}
+        \item A link is dropped when either of its questions is missing from the question table (for example deleted).
       \end{itemize}
   \end{itemize}
   \begin{center}\includegraphics[height=3.0cm]{results/dataset/questions_per_year.png}\end{center}
@@ -296,7 +296,7 @@
       \end{itemize}
     \item \textbf{Challenge 3: Directional Duplicate Ground Truth}
       \begin{itemize}
-        \item \textit{Fix:} Enforced asymmetric question ordering (\texttt{post\_id} > \texttt{cand\_id}) to reflect genuine Stack Overflow duplicate linkage semantics.
+        \item \textit{Fix:} Each link is oriented by the \texttt{created} timestamp of its two questions (the newer is \texttt{dup\_id}), not by id order; links with equal timestamps are dropped.
       \end{itemize}
   \end{itemize}
   \vfill

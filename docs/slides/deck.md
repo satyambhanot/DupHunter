@@ -49,11 +49,11 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 ## 3. Exploratory Data Analysis & Answer Key
 - **Ground Truth Duplicates (Contract C6):**
   - Extracted from `post_links` with `LinkTypeId = 3` (duplicate relationship).
-  - Enforced directional validity: the newer duplicate question (`post_id`) must target an existing earlier question (`cand_id`).
+  - Oriented by creation time (`src/etl/answer_key.py`): `dup_id` is the newer question, `original_id` the older one; links whose two questions have the same timestamp are dropped.
 - **Data Observations:**
   - About $2.6\%$ of Super User questions are labelled duplicates (13,325 of 516,669; `results/dataset_stats.md`). [TODO: share on the python subset (#31)]
-  - Asymmetric relationship: popular foundational questions (e.g. *"How to iterate over a dictionary"*) attract hundreds of duplicate references.
-  - Missing owners or deleted questions filtered cleanly during ingestion.
+  - Asymmetric relationship: a few original questions attract many duplicates. [TODO: top originals by number of duplicates, from the profile (#31)]
+  - A link is dropped when either of its questions is missing from the question table (for example deleted).
 - **Figure Citation:** Questions per year (`results/dataset/questions_per_year.png`)
 
 ---
@@ -210,7 +210,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 - **Challenge 2: Garbage Collection Overhead in PySpark**
   - *Fix:* [TODO: describe the real fix and its measurement from the E8 runs (#32)]
 - **Challenge 3: Directional Duplicate Ground Truth**
-  - *Fix:* Enforced asymmetric question ordering (`post_id` > `cand_id`) to reflect genuine Stack Overflow duplicate linkage semantics.
+  - *Fix:* Each link is oriented by the `created` timestamp of its two questions (newer is `dup_id`), not by id order; links with equal timestamps are dropped.
 - **Figure Citation:** TODO (not yet produced): Memory and GC profile (`results/e8_scaling/executor_gc.csv`)
 
 ---
