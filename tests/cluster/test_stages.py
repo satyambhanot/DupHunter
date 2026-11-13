@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+import os
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,7 +14,7 @@ from pyspark.sql import SparkSession
 
 from scripts.cluster.stages import (
     STAGES,
-    in_sample,
+    _restrict_answer_key,
     load_config,
     plan_stages,
     run_pipeline,
@@ -53,24 +55,6 @@ class StagePlanningTests(unittest.TestCase):
         self.assertEqual(p100["lsh"], "hdfs:///out/100pct/candidates/chosen")
 
 
-class SamplingTests(unittest.TestCase):
-    """Unit tests for deterministic subset sampling."""
-
-    def test_in_sample_ten_percent_is_subset_of_twenty_five_percent(self) -> None:
-        post_ids = range(1, 2000)
-        s10 = {pid for pid in post_ids if in_sample(pid, 0.10, seed=42)}
-        s25 = {pid for pid in post_ids if in_sample(pid, 0.25, seed=42)}
-        s100 = {pid for pid in post_ids if in_sample(pid, 1.0, seed=42)}
-        self.assertTrue(s10.issubset(s25))
-        self.assertTrue(s25.issubset(s100))
-        self.assertEqual(len(s100), len(list(post_ids)))
-
-    def test_in_sample_rejects_invalid_fraction(self) -> None:
-        for bad in (0.0, -0.1, 1.1):
-            with self.assertRaises(ValueError):
-                in_sample(1, bad)
-
-
 class SparkPipelineTests(unittest.TestCase):
     """Spark-backed tests for deterministic sampling and end-to-end stage execution."""
 
@@ -100,6 +84,25 @@ class SparkPipelineTests(unittest.TestCase):
         self.assertEqual(ids_25, ids_25_repeat)
         self.assertEqual(len(ids_100), 500)
 
+    def test_sample_posts_rejects_invalid_fraction(self) -> None:
+        df = self.spark.createDataFrame([(1,)], ["post_id"])
+        for bad in (0.0, -0.1, 1.1):
+            with self.assertRaises(ValueError):
+                sample_posts(df, bad)
+
+    def test_restrict_answer_key_excludes_out_of_sample_pairs(self) -> None:
+        sampled = self.spark.createDataFrame([(1,), (2,)], ["post_id"])
+        answer_key = self.spark.createDataFrame(
+            [
+                (2, 1, datetime(2024, 1, 2, tzinfo=UTC)),
+                (4, 3, datetime(2024, 1, 4, tzinfo=UTC)),
+                (3, 1, datetime(2024, 1, 3, tzinfo=UTC)),
+            ],
+            ["dup_id", "original_id", "created"],
+        )
+        restricted = _restrict_answer_key(answer_key, sampled).collect()
+        self.assertEqual([(r["dup_id"], r["original_id"]) for r in restricted], [(2, 1)])
+
     def test_run_pipeline_executes_stages_and_resumes_from_done(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
         config = load_config(repo_root / "configs" / "full_run.json")
@@ -119,10 +122,10 @@ class SparkPipelineTests(unittest.TestCase):
                 (4, "django orm filter by date", "<p>body</p>"),
             ]
             meta = [
-                (1, "2024-01-01T00:00:00Z"),
-                (2, "2024-01-02T00:00:00Z"),
-                (3, "2024-01-03T00:00:00Z"),
-                (4, "2024-01-04T00:00:00Z"),
+                (1, datetime(2024, 1, 1, tzinfo=UTC)),
+                (2, datetime(2024, 1, 2, tzinfo=UTC)),
+                (3, datetime(2024, 1, 3, tzinfo=UTC)),
+                (4, datetime(2024, 1, 4, tzinfo=UTC)),
             ]
             store: dict[str, tuple[list[tuple], object]] = {}
 
@@ -141,9 +144,14 @@ class SparkPipelineTests(unittest.TestCase):
                 self.spark.createDataFrame(meta, ["post_id", "created"]),
                 meta_path,
             )
+            # Include one in-sample pair (2, 1) and one out-of-sample pair (99, 98);
+            # evaluate() must restrict the answer key to sampled posts so n_queries == 1.
             fake_write(
                 self.spark.createDataFrame(
-                    [(2, 1, "2024-01-02T00:00:00Z")],
+                    [
+                        (2, 1, datetime(2024, 1, 2, tzinfo=UTC)),
+                        (99, 98, datetime(2024, 1, 5, tzinfo=UTC)),
+                    ],
                     ["dup_id", "original_id", "created"],
                 ),
                 answer_key_path,
@@ -167,6 +175,8 @@ class SparkPipelineTests(unittest.TestCase):
                 self.assertEqual(len(summaries), 2)
                 self.assertIn(f"{output_root}/100pct/candidates/default", store)
                 self.assertIn(f"{output_root}/100pct/candidates/chosen", store)
+                per_pair_rows, _ = store[f"{output_root}/100pct/per_pair/chosen"]
+                self.assertEqual(len(per_pair_rows), 1)
 
                 with Path(metrics_csv).open(newline="", encoding="utf-8") as handle:
                     rows = list(csv.DictReader(handle))
@@ -186,6 +196,55 @@ class SparkPipelineTests(unittest.TestCase):
                     metrics_out=metrics_csv,
                 )
                 self.assertEqual(len(resumed), 1)
+
+    @unittest.skipIf(
+        os.name == "nt" and not os.environ.get("HADOOP_HOME"),
+        "Spark Parquet writes on Windows require HADOOP_HOME/winutils.exe",
+    )
+    def test_run_pipeline_real_parquet_round_trip(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        config = load_config(repo_root / "configs" / "full_run.json")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            posts_path = str(root / "posts_text")
+            meta_path = str(root / "posts_meta")
+            answer_key_path = str(root / "answer_key")
+            output_root = str(root / "out")
+            metrics_csv = str(root / "metrics.csv")
+
+            self.spark.createDataFrame(
+                [
+                    (1, "python list comprehension syntax", "<p>body</p>"),
+                    (2, "python list comprehension syntax", "<p>dup</p>"),
+                ],
+                ["post_id", "title", "body"],
+            ).write.parquet(posts_path)
+            self.spark.createDataFrame(
+                [
+                    (1, datetime(2024, 1, 1, tzinfo=UTC)),
+                    (2, datetime(2024, 1, 2, tzinfo=UTC)),
+                ],
+                ["post_id", "created"],
+            ).write.parquet(meta_path)
+            self.spark.createDataFrame(
+                [(2, 1, datetime(2024, 1, 2, tzinfo=UTC))],
+                ["dup_id", "original_id", "created"],
+            ).write.parquet(answer_key_path)
+
+            summaries = run_pipeline(
+                self.spark,
+                config,
+                fractions=[1.0],
+                setting_names=["chosen"],
+                posts_text_path=posts_path,
+                posts_meta_path=meta_path,
+                answer_key_path=answer_key_path,
+                output_root=output_root,
+                metrics_out=metrics_csv,
+            )
+            self.assertEqual(len(summaries), 1)
+            self.assertTrue((Path(output_root) / "100pct" / "candidates" / "chosen").exists())
 
 
 if __name__ == "__main__":

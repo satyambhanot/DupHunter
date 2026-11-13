@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import sys
@@ -50,21 +49,6 @@ def validate_fraction(fraction: float) -> float:
     if not 0.0 < fraction <= 1.0:
         raise ValueError(f"fraction must be in (0, 1], got {fraction!r}")
     return float(fraction)
-
-
-def sample_bucket(post_id: int, seed: int = 0) -> int:
-    """Assign a deterministic bucket in ``[0, SAMPLE_BUCKETS)`` for ``post_id``."""
-    digest = hashlib.blake2b(f"{seed}:{post_id}".encode(), digest_size=8).digest()
-    return int.from_bytes(digest, "big") % SAMPLE_BUCKETS
-
-
-def in_sample(post_id: int, fraction: float, seed: int = 0) -> bool:
-    """Return True when ``post_id`` falls within the deterministic prefix ``fraction``."""
-    validate_fraction(fraction)
-    if fraction == 1.0:
-        return True
-    threshold = int(round(fraction * SAMPLE_BUCKETS))
-    return sample_bucket(post_id, seed) < threshold
 
 
 def sample_posts(
@@ -130,6 +114,19 @@ def _prepare_text_inputs(posts_text: DataFrame, fields: str) -> DataFrame:
     raise ValueError(f"Unsupported shingles.fields {fields!r}; expected 'title' or 'title+body'")
 
 
+def _restrict_answer_key(answer_key: DataFrame, sampled_ids: DataFrame) -> DataFrame:
+    """Keep only answer-key pairs whose dup_id and original_id are both in ``sampled_ids``."""
+    return answer_key.join(
+        sampled_ids.select(F.col("post_id").alias("dup_id")),
+        on="dup_id",
+        how="left_semi",
+    ).join(
+        sampled_ids.select(F.col("post_id").alias("original_id")),
+        on="original_id",
+        how="left_semi",
+    )
+
+
 def _resolve_settings(
     config: dict[str, Any],
     requested_names: Sequence[str] | None,
@@ -171,6 +168,7 @@ def run_pipeline(
     metrics_csv = metrics_out or config.get("metrics_out", "results/core_pipeline_metrics.csv")
 
     seed = int(config.get("seed", 42))
+    target_tag = config.get("tag")
     target_fractions = [
         validate_fraction(float(f)) for f in (fractions or config.get("fractions", [0.1, 1.0]))
     ]
@@ -203,6 +201,8 @@ def run_pipeline(
         if "shingles" in planned:
             t0 = time.perf_counter()
             posts_df = _read_parquet(spark, posts_text_uri)
+            if target_tag and "tags" in posts_df.columns:
+                posts_df = posts_df.filter(F.array_contains(F.col("tags"), target_tag))
             posts_df = sample_posts(posts_df, fraction, seed=seed)
             posts_df = _prepare_text_inputs(posts_df, shingle_fields)
             shingled = build_shingles(posts_df, shingle_config)
@@ -267,10 +267,12 @@ def run_pipeline(
 
             if "evaluate" in planned and answer_key_df is not None:
                 t0 = time.perf_counter()
+                sigs_ids = _read_parquet(spark, paths["minhash"]).select("post_id")
                 if n_questions is None:
-                    n_questions = _read_parquet(spark, paths["minhash"]).count()
+                    n_questions = sigs_ids.count()
+                scoped_key = _restrict_answer_key(answer_key_df, sigs_ids)
                 candidates_df = _read_parquet(spark, paths["lsh"])
-                metrics = evaluate(candidates_df, answer_key_df, n_questions=n_questions)
+                metrics = evaluate(candidates_df, scoped_key, n_questions=n_questions)
                 run_settings = {
                     "fraction": fraction,
                     "setting": setting_name,
@@ -284,7 +286,7 @@ def run_pipeline(
                     run_settings,
                     metrics,
                 )
-                table = per_pair_table(candidates_df, answer_key_df)
+                table = per_pair_table(candidates_df, scoped_key)
                 _write_parquet(table, paths["per_pair"])
                 logger.info(
                     "Stage evaluate (fraction=%s, setting=%s) finished in %.2fs -> %s",
