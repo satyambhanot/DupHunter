@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from src.verification.rankers import C5_COLUMNS, RANKERS
 from src.verification.rerank import TfidfRanker, compare_with_tfidf, parse_args
+from src.verification.verify import parse_args as verify_parse_args
+from src.verification.verify import verify_candidates
 
 
 class TestTfidfRanker:
@@ -91,8 +95,47 @@ class TestTfidfRanker:
             "dup_id long, cand_id long, est_sim double",
         )
 
-        rows = compare_with_tfidf(candidates, shingles, posts)
+        answer_key = spark.createDataFrame(
+            [(1, 101, "2020-01-01")], "dup_id long, original_id long, created string"
+        )
+        rows = compare_with_tfidf(candidates, shingles, posts, answer_key=answer_key, n_questions=3)
         assert [r["method"] for r in rows] == ["estimated", "exact_jaccard", "tfidf"]
+        by_method = {r["method"]: r for r in rows}
+        assert by_method["estimated"]["recall@1"] == 0.0
+        assert by_method["exact_jaccard"]["recall@1"] == 1.0
+        assert by_method["tfidf"]["recall@1"] == 1.0
+        assert by_method["tfidf"]["ndcg@10"] == 1.0
+
+    def test_verify_candidates_tfidf_requires_posts(self, spark) -> None:
+        candidates = spark.createDataFrame(
+            [(1, 101, 0.5)], "dup_id long, cand_id long, est_sim double"
+        )
+        with pytest.raises(ValueError, match="--posts"):
+            verify_candidates(candidates, method="tfidf")
+
+        posts = spark.createDataFrame(
+            [(1, "pandas dataframe", ""), (101, "pandas dataframe", "")],
+            "post_id long, title string, body string",
+        )
+        ranked = verify_candidates(candidates, method="tfidf", posts=posts)
+        assert ranked.collect()[0]["method"] == "tfidf"
+
+        with pytest.raises(SystemExit):
+            verify_parse_args(
+                ["--input", "c", "--shingles", "s", "--output", "o", "--method", "tfidf"]
+            )
+
+    def test_missing_post_ids_logs_warning(self, spark, caplog) -> None:
+        posts = spark.createDataFrame(
+            [(1, "pandas dataframe", "")], "post_id long, title string, body string"
+        )
+        candidates = spark.createDataFrame(
+            [(1, 999, 0.8)], "dup_id long, cand_id long, est_sim double"
+        )
+        with caplog.at_level(logging.WARNING):
+            rows = RANKERS["tfidf"].rank(candidates, posts=posts).collect()
+        assert rows[0]["score"] == 0.0
+        assert "missing from posts text" in caplog.text
 
     def test_missing_posts_raises(self, spark) -> None:
         candidates = spark.createDataFrame(

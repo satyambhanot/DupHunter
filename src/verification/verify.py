@@ -44,10 +44,24 @@ def verify_candidates(
     method: str = "exact_jaccard",
     top_k: int = 10,
     min_jaccard: float | None = None,
+    posts: DataFrame | None = None,
 ) -> DataFrame:
     """Rank C4 candidates using the named strategy in ``RANKERS``."""
     if method not in RANKERS:
         raise ValueError(f"Unknown ranking method '{method}'. Available: {sorted(RANKERS)}")
+    if method == "tfidf":
+        if posts is None and (
+            shingles is None
+            or not ({"title", "body"} <= set(shingles.columns) or "text" in shingles.columns)
+        ):
+            raise ValueError("method='tfidf' requires C1 posts text DataFrame (--posts)")
+        return RANKERS[method].rank(
+            candidates=candidates,
+            shingles=shingles,
+            top_k=top_k,
+            min_jaccard=min_jaccard,
+            posts=posts,
+        )
     return RANKERS[method].rank(
         candidates=candidates,
         shingles=shingles,
@@ -202,11 +216,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional C6 answer key Parquet for Recall@k and MRR comparison",
     )
     parser.add_argument(
+        "--posts",
+        default=None,
+        help="Path to C1 posts_text Parquet (required when --method tfidf)",
+    )
+    parser.add_argument(
         "--master",
         default="local[*]",
         help="Spark master URL (default: local[*])",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.method == "tfidf" and not args.posts:
+        parser.error("--posts is required when --method tfidf is used")
+    return args
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -217,6 +239,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         candidates = _read_parquet(spark, args.input)
         shingles = _read_parquet(spark, args.shingles)
+        posts = _read_parquet(spark, args.posts) if args.posts else None
         answer_key = _read_parquet(spark, args.answer_key) if args.answer_key else None
 
         if args.method == "both" or args.output.lower().endswith(".csv"):
@@ -242,6 +265,7 @@ def main(argv: list[str] | None = None) -> None:
                 method=args.method,
                 top_k=args.top_k,
                 min_jaccard=args.min_jaccard,
+                posts=posts,
             )
             ranked.write.mode("overwrite").parquet(args.output)
     finally:

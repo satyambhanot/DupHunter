@@ -1,4 +1,4 @@
-"""TF-IDF cosine re-ranking of top LSH candidates (Experiment E4 stretch, #40).
+"""TF-IDF cosine re-ranking of top LSH candidates (Experiment E4, #40).
 
 Re-ranks the top-N candidates (default 50) per duplicate query using TF-IDF
 cosine similarity computed over the question corpus, with exact Jaccard and
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import logging
 import math
 import re
 from collections import Counter
@@ -20,6 +21,8 @@ import pyarrow.parquet as pq
 from py4j.protocol import Py4JJavaError
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
+
+logger = logging.getLogger(__name__)
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
@@ -40,6 +43,37 @@ def compute_idf(corpus_tokens: dict[int, list[str]]) -> dict[str, float]:
     for tokens in corpus_tokens.values():
         doc_freq.update(set(tokens))
     return {term: math.log((n_docs + 1.0) / (df + 1.0)) + 1.0 for term, df in doc_freq.items()}
+
+
+def _compute_idf_spark(posts: DataFrame, min_df: int = 1) -> dict[str, float]:
+    """Compute smooth IDF weights in Spark without collecting full post texts."""
+    n_docs = posts.select("post_id").distinct().count()
+    if n_docs == 0:
+        return {}
+
+    cols = set(posts.columns)
+    if {"title", "body"} <= cols:
+        raw_text = F.concat_ws(
+            " ", F.coalesce(F.col("title"), F.lit("")), F.coalesce(F.col("body"), F.lit(""))
+        )
+    elif "text" in cols:
+        raw_text = F.coalesce(F.col("text"), F.lit(""))
+    elif "title" in cols:
+        raw_text = F.coalesce(F.col("title"), F.lit(""))
+    else:
+        raise ValueError("Posts DataFrame must contain ('title', 'body'), 'text', or 'title'")
+
+    cleaned = F.lower(F.regexp_replace(raw_text, r"<[^>]+>", " "))
+    tokens = F.filter(F.split(cleaned, r"[^a-z0-9_]+"), lambda t: t != "")
+    distinct_terms = posts.select("post_id", F.explode(F.array_distinct(tokens)).alias("term"))
+    df_counts = distinct_terms.groupBy("term").count()
+    if min_df > 1:
+        df_counts = df_counts.filter(F.col("count") >= min_df)
+
+    return {
+        str(row["term"]): math.log((n_docs + 1.0) / (float(row["count"]) + 1.0)) + 1.0
+        for row in df_counts.collect()
+    }
 
 
 def _tfidf_unit_vector(tokens: list[str], idf: dict[str, float]) -> dict[str, float]:
@@ -64,7 +98,7 @@ def tfidf_cosine(vec_a: dict[str, float], vec_b: dict[str, float]) -> float:
 
 
 def _extract_corpus_tokens(posts: DataFrame) -> dict[int, list[str]]:
-    """Collect ``post_id -> word tokens`` from C1 posts_text or a text DataFrame."""
+    """Collect ``post_id -> word tokens`` for the filtered posts DataFrame."""
     cols = set(posts.columns)
     if "title" in cols and "body" in cols:
         rows = posts.select("post_id", "title", "body").collect()
@@ -109,9 +143,15 @@ class TfidfRanker:
 
     name: str = "tfidf"
 
-    def __init__(self, posts: DataFrame | None = None, candidate_pool: int = 50) -> None:
+    def __init__(
+        self,
+        posts: DataFrame | None = None,
+        candidate_pool: int = 50,
+        min_df: int = 1,
+    ) -> None:
         self.posts = posts
         self.candidate_pool = candidate_pool
+        self.min_df = min_df
 
     def rank(
         self,
@@ -141,13 +181,13 @@ class TfidfRanker:
             )
             tie_col = "exact_jaccard"
         else:
-            scored = candidates.withColumn("exact_jaccard", F.col("est_sim").cast("double"))
+            scored = candidates.withColumn("tie_score", F.col("est_sim").cast("double"))
             if min_jaccard is not None:
                 scored = scored.filter(F.col("est_sim") >= min_jaccard)
             pool_order = Window.partitionBy("dup_id").orderBy(
                 F.col("est_sim").desc(), F.col("cand_id").asc()
             )
-            tie_col = "exact_jaccard"
+            tie_col = "tie_score"
 
         pool = (
             scored.withColumn("_pool_rank", F.row_number().over(pool_order))
@@ -162,9 +202,21 @@ class TfidfRanker:
                 "dup_id long, cand_id long, rank int, score double, method string",
             )
 
-        corpus_tokens = _extract_corpus_tokens(text_df)
-        idf = compute_idf(corpus_tokens)
-        vectors = {pid: _tfidf_unit_vector(tokens, idf) for pid, tokens in corpus_tokens.items()}
+        idf = _compute_idf_spark(text_df, min_df=self.min_df)
+
+        pool_ids = {int(r["dup_id"]) for r in pool} | {int(r["cand_id"]) for r in pool}
+        pool_ids_df = spark.createDataFrame([(pid,) for pid in sorted(pool_ids)], "post_id long")
+        pool_posts = text_df.join(pool_ids_df, "post_id", "inner")
+        pool_tokens = _extract_corpus_tokens(pool_posts)
+
+        missing_ids = pool_ids - set(pool_tokens)
+        if missing_ids:
+            logger.warning(
+                "%d query/candidate post_id(s) missing from posts text; cosine defaults to 0.0",
+                len(missing_ids),
+            )
+
+        vectors = {pid: _tfidf_unit_vector(tokens, idf) for pid, tokens in pool_tokens.items()}
 
         by_query: dict[int, list[tuple[int, float, float]]] = {}
         for row in pool:
@@ -203,11 +255,14 @@ def compare_with_tfidf(
     candidates: DataFrame,
     shingles: DataFrame,
     posts: DataFrame,
+    answer_key: DataFrame | None = None,
+    n_questions: int | None = None,
     top_k: int = 10,
     min_jaccard: float | None = None,
     candidate_pool: int = 50,
 ) -> list[dict[str, object]]:
     """Compare ``estimated``, ``exact_jaccard``, and ``tfidf`` rankings."""
+    from src.evaluation.evaluate import evaluate
     from src.verification.rankers import RANKERS
 
     est_df = (
@@ -226,9 +281,6 @@ def compare_with_tfidf(
         .cache()
     )
 
-    exact_top1 = exact_df.filter(F.col("rank") == 1).select(
-        "dup_id", F.col("cand_id").alias("x_top1")
-    )
     rows: list[dict[str, object]] = []
     for method_name, df in [
         ("estimated", est_df),
@@ -238,32 +290,25 @@ def compare_with_tfidf(
         stats = df.agg(
             F.countDistinct("dup_id").alias("n_queries"),
             F.count("*").alias("n_ranked"),
-            F.avg("score").alias("mean_score"),
         ).collect()[0]
-        m_top1 = df.filter(F.col("rank") == 1).select("dup_id", F.col("cand_id").alias("m_top1"))
-        joined_t1 = m_top1.join(exact_top1, "dup_id", "inner")
-        n_t1 = joined_t1.count()
-        agree = (
-            joined_t1.filter(F.col("m_top1") == F.col("x_top1")).count() / n_t1 if n_t1 > 0 else 0.0
-        )
-        rank_join = df.select("dup_id", "cand_id", F.col("rank").alias("m_rank")).join(
-            exact_df.select("dup_id", "cand_id", F.col("rank").alias("x_rank")),
-            ["dup_id", "cand_id"],
-            "inner",
-        )
-        shift_val = rank_join.agg(
-            F.avg(F.abs(F.col("m_rank") - F.col("x_rank"))).alias("s")
-        ).collect()[0]["s"]
-        rows.append(
-            {
-                "method": method_name,
-                "n_queries": int(stats["n_queries"] or 0),
-                "n_ranked": int(stats["n_ranked"] or 0),
-                "mean_score": round(float(stats["mean_score"] or 0.0), 6),
-                "top1_agreement_with_exact": round(float(agree), 6),
-                "mean_abs_rank_shift_vs_exact": round(float(shift_val or 0.0), 6),
-            }
-        )
+        row: dict[str, object] = {
+            "method": method_name,
+            "n_queries": int(stats["n_queries"] or 0),
+            "n_ranked": int(stats["n_ranked"] or 0),
+        }
+        if answer_key is not None:
+            metrics = evaluate(df, answer_key, n_questions=n_questions, max_rank=top_k)
+            for key in (
+                "recall@1",
+                "recall@5",
+                "recall@10",
+                "precision@10",
+                "map",
+                "ndcg@10",
+                "reduction_ratio",
+            ):
+                row[key] = round(float(metrics[key]), 6)
+        rows.append(row)
     return rows
 
 
@@ -273,6 +318,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input", "--candidates", dest="input", required=True)
     parser.add_argument("--shingles", required=True)
     parser.add_argument("--posts", required=True)
+    parser.add_argument("--answer-key", default=None)
+    parser.add_argument("--n-questions", type=int, default=None)
     parser.add_argument("--output", required=True)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--candidate-pool", type=int, default=50)
@@ -290,10 +337,13 @@ def main(argv: list[str] | None = None) -> None:
         candidates = _read_parquet(spark, args.input)
         shingles = _read_parquet(spark, args.shingles)
         posts = _read_parquet(spark, args.posts)
+        answer_key = _read_parquet(spark, args.answer_key) if args.answer_key else None
         rows = compare_with_tfidf(
             candidates=candidates,
             shingles=shingles,
             posts=posts,
+            answer_key=answer_key,
+            n_questions=args.n_questions,
             top_k=args.top_k,
             min_jaccard=args.min_jaccard,
             candidate_pool=args.candidate_pool,
