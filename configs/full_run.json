@@ -1,0 +1,46 @@
+{
+  "experiment": "core_pipeline",
+  "seed": 42,
+  "site": "stackoverflow",
+  "tag": "python",
+  "fractions": [0.1, 1.0],
+  "shingles": {
+    "representation": "word",
+    "k": 1,
+    "fields": "title",
+    "drop_common_share": null
+  },
+  "minhash": {
+    "n": 128,
+    "seed": 42
+  },
+  "lsh": {
+    "bands_per_pass": null,
+    "settings": [
+      {
+        "name": "default",
+        "b": 16,
+        "r": 8,
+        "n": 128,
+        "bucket_policy": "size_limit",
+        "bucket_limit": 1000
+      },
+      {
+        "name": "chosen",
+        "b": 32,
+        "r": 4,
+        "n": 128,
+        "bucket_policy": "size_limit",
+        "bucket_limit": 1000
+      }
+    ]
+  },
+  "hdfs": {
+    "posts_text": "hdfs:///data/parquet/stackoverflow/posts_text",
+    "posts_meta": "hdfs:///data/parquet/stackoverflow/posts_meta",
+    "answer_key": "hdfs:///data/answer_key/stackoverflow",
+    "output_root": "hdfs:///data/core_pipeline/stackoverflow",
+    "event_log_dir": "hdfs:///spark-logs"
+  },
+  "metrics_out": "results/core_pipeline_metrics.csv"
+}
