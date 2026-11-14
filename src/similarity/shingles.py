@@ -1,9 +1,11 @@
 """Build deterministic Spark shingle sets from the C1 ``posts_text`` table."""
 
+import argparse
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from pyspark.sql import Column, DataFrame
+from pyspark.sql import Column, DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 _HASH_MODULUS = 2_147_483_647
@@ -198,3 +200,67 @@ def build_shingles(
         F.col("shingles"),
         F.col("code_shingles"),
     )
+
+
+def shingles_from_options(
+    posts_text: DataFrame,
+    config: ShingleConfig = DEFAULT_CONFIG,
+    *,
+    fields: str = "title+body",
+    include_code: bool = False,
+) -> DataFrame:
+    """C2 rows with the E1 options: use the title only, and/or add the code shingles.
+
+    ``fields="title"`` blanks the body first, so only the title is shingled. ``include_code``
+    merges ``code_shingles`` into ``shingles``. With the defaults this is ``build_shingles``.
+    """
+    if fields not in ("title", "title+body"):
+        raise ValueError(f"fields must be 'title' or 'title+body', got {fields!r}")
+    source = posts_text if fields == "title+body" else posts_text.withColumn("body", F.lit(""))
+    shingled = build_shingles(source.select("post_id", "title", "body"), config)
+    if include_code:
+        shingled = shingled.withColumn("shingles", F.array_union("shingles", "code_shingles"))
+    return shingled
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build C2 shingle sets from C1 posts_text (post_id, title, body) as Parquet."
+    )
+    parser.add_argument("--posts", required=True, help="posts_text Parquet (C1)")
+    parser.add_argument("--out", required=True, help="where to write the C2 Parquet")
+    parser.add_argument("--representation", choices=sorted(SHINGLE_BUILDERS), default="word")
+    parser.add_argument("--k", type=int, default=DEFAULT_CONFIG.k, help="words or characters")
+    parser.add_argument(
+        "--fields", choices=("title", "title+body"), default="title+body", help="text to shingle"
+    )
+    parser.add_argument(
+        "--drop-common-share",
+        type=float,
+        help="drop shingles that appear in more than this share of the questions (0 to 1)",
+    )
+    parser.add_argument(
+        "--include-code", action="store_true", help="add the code shingles to the shingle set"
+    )
+    parser.add_argument("--master", default="local[*]", help="Spark master")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Read posts_text, write the C2 shingle sets."""
+    args = parse_args(argv)
+    config = ShingleConfig(args.representation, args.k, args.drop_common_share)
+    spark = SparkSession.builder.master(args.master).appName("duphunter-shingles").getOrCreate()
+    shingled = shingles_from_options(
+        spark.read.parquet(args.posts),
+        config,
+        fields=args.fields,
+        include_code=args.include_code,
+    )
+    shingled.write.mode("overwrite").parquet(args.out)
+    print(f"wrote {args.out} ({args.representation}, k={args.k}, {args.fields})", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

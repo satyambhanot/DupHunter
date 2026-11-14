@@ -28,6 +28,16 @@ from src.similarity.shingles import ShingleConfig, build_shingles
 result = build_shingles(posts_text, ShingleConfig(k=2))
 ```
 
+From a terminal (reads C1 `posts_text`, writes C2 as Parquet):
+
+```bash
+python -m src.similarity.shingles --posts data/parquet/superuser/posts_text --out data/c2 \
+    --representation word --k 1 --fields title
+```
+
+`--fields title` shingles only the title (the E1 choice), `--include-code` adds the code shingles to the
+set, and `--drop-common-share 0.05` drops shingles that appear in more than that share of the questions.
+
 `ShingleConfig` is frozen. Its `representation` can be `word` or `character`,
 `k` selects the group size, and `drop_common_share` optionally removes shingles
 appearing in more than that fraction of posts. For word shingles, a text shorter
@@ -49,6 +59,16 @@ signatures = build_signatures(
     MinHashConfig(n=128, seed=42),
 )
 ```
+
+From a terminal (reads C2, writes C3 as Parquet):
+
+```bash
+python -m src.similarity.minhash --shingles data/c2 --out data/c3 --n 128 --seed 42 \
+    --created-from data/parquet/superuser/posts_text
+```
+
+`--created-from` is optional: it adds the `created` column from any Parquet with `post_id` and `created`, so
+`lsh.py` orients each pair by date instead of by question ID.
 
 An empty shingle set has `2,147,483,647` in every signature position; non-empty
 values are in `[0, 2,147,483,647)`. The seeded coefficient sequence is
