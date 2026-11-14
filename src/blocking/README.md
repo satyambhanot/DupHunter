@@ -16,6 +16,14 @@ python -m src.blocking.son --input data/exports/superuser/python_tags \
     --output results/e6_blocking/frequent_tagsets.csv --support 0.01 --master local[*]
 ```
 
+## Using Tag Blocking (#17)
+
+```bash
+python -m src.blocking.blocking --posts-tags data/exports/superuser/python_tags \
+    --tagsets results/e6_blocking/frequent_tagsets.csv --mode son \
+    --groups-out data/groups/son --master local[*]
+```
+
 ## Tests
 
 ```bash
