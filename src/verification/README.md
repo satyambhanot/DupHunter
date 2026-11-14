@@ -7,6 +7,7 @@
 | `verify.py` | Exact Jaccard similarity for every LSH candidate pair; ranked candidate lists | E4 (#29) |
 | `rankers.py` | `Ranker` protocol, `EstimatedRanker`, `ExactJaccardRanker`, and `RANKERS` registry | E4 (#29) |
 | `rerank.py` | TF-IDF cosine re-ranking of the top candidates (stretch) | E4 (#29) |
+| `salt_split.py` | Bucket-splitting (salting) policy for oversized LSH buckets (stretch) | E7 (#41) |
 | `buckets.py` | Bucket-size profile; size limit vs. splitting big buckets (salting) vs. dropping common shingles | E7 (#30) |
 
 **Our code vs. libraries:** all our own code, built on Spark DataFrames.
