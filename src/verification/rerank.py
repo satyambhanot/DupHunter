@@ -77,11 +77,13 @@ def _compute_idf_spark(posts: DataFrame, min_df: int = 2) -> dict[str, float]:
 
 
 def _tfidf_unit_vector(tokens: list[str], idf: dict[str, float]) -> dict[str, float]:
-    """Build an L2-normalized TF-IDF sparse vector for a token list."""
-    if not tokens:
+    """Build an L2-normalized TF-IDF sparse vector restricted to terms in ``idf``."""
+    if not tokens or not idf:
         return {}
     tf = Counter(tokens)
-    vec = {term: count * idf.get(term, 1.0) for term, count in tf.items()}
+    vec = {term: count * idf[term] for term, count in tf.items() if term in idf}
+    if not vec:
+        return {}
     norm = math.sqrt(sum(w * w for w in vec.values()))
     if norm == 0.0:
         return {}

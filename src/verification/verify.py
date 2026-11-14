@@ -228,6 +228,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.method == "tfidf" and not args.posts:
         parser.error("--posts is required when --method tfidf is used")
+    if args.method == "tfidf" and args.output.lower().endswith(".csv"):
+        parser.error(
+            "CSV comparison for --method tfidf is not supported by verify; "
+            "use `python -m src.verification.rerank` instead"
+        )
     return args
 
 

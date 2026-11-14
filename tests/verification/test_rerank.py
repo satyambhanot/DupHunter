@@ -7,7 +7,13 @@ import logging
 import pytest
 
 from src.verification.rankers import C5_COLUMNS, RANKERS
-from src.verification.rerank import TfidfRanker, compare_with_tfidf, parse_args
+from src.verification.rerank import (
+    TfidfRanker,
+    _tfidf_unit_vector,
+    compare_with_tfidf,
+    parse_args,
+    tfidf_cosine,
+)
 from src.verification.verify import parse_args as verify_parse_args
 from src.verification.verify import verify_candidates
 
@@ -144,6 +150,16 @@ class TestTfidfRanker:
         )
         with pytest.raises(ValueError, match="posts text"):
             RANKERS["tfidf"].rank(candidates)
+
+    def test_tfidf_unit_vector_excludes_out_of_vocab_terms(self) -> None:
+        idf = {"python": 1.5}
+        assert _tfidf_unit_vector(["unique_only"], idf) == {}
+        vec_a = _tfidf_unit_vector(["python", "unique_a"], idf)
+        vec_b = _tfidf_unit_vector(["python", "unique_b"], idf)
+        assert vec_a == {"python": 1.0}
+        assert vec_b == {"python": 1.0}
+        assert tfidf_cosine(vec_a, vec_b) == pytest.approx(1.0)
+        assert tfidf_cosine(_tfidf_unit_vector(["unique_only"], idf), vec_a) == 0.0
 
     def test_parse_args(self) -> None:
         args = parse_args(
