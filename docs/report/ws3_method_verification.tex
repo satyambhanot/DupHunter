@@ -1,0 +1,112 @@
+% WS3 report fragment (issue #39): candidate verification, big-bucket handling,
+% SON frequent-tagset blocking, E4/E6/E7 results and limitations, and WS3 contribution.
+% No preamble. Included via \input in docs/report/main.tex (WS3).
+% Defines \wsthreeMethodology (Section 5 part), \wsthreeResults (Section 8 part),
+% \wsthreeAnalysis (Section 9 part), and \wsthreeContribution (Section 11 part).
+% Every empirical number carries a "% source:" comment; "% TODO" marks pending cluster runs.
+%
+% Citation keys in docs/report/refs.bib:
+%   \cite{salton1988tfidf, savasere1995son, agrawal1994apriori}
+
+\newcommand{\wsthreeMethodology}{%
+\subsection{Candidate Verification and Re-Ranking (E4)}
+LSH candidate pairs (Contract C4) carry only a noisy MinHash estimate $\hat{J}(A, B)$ with standard
+deviation $\sqrt{J(1-J)/n}$ and positive selection bias toward pairs whose random band hashes
+collide. In Stage C4 $\to$ C5 (\texttt{src/verification/verify.py}), we join candidate IDs against
+the C2 shingle sets and compute exact Jaccard similarity:
+\begin{equation}
+  J(A, B) = \frac{|A \cap B|}{|A \cup B|}.
+\end{equation}
+A shared \texttt{Ranker} protocol (\texttt{src/verification/rankers.py}) supports both
+\texttt{EstimatedRanker} and \texttt{ExactJaccardRanker}. As a stretch extension (#40),
+\texttt{TfidfReranker} (\texttt{src/verification/rerank.py}) computes unit-normalized TF-IDF
+cosine similarity \cite{salton1988tfidf} over the top-$k$ verified candidates per query to resolve
+lexical ties using rare-term weights.
+
+\subsection{Big-Bucket Skew Mitigation (E7)}
+Popular or boilerplate title shingles can push many questions into a single LSH bucket, turning a
+single Spark partition into a quadratic bottleneck. Through Contract Hook 1
+(\texttt{--bucket-policy}), \texttt{src/verification/buckets.py} profiles bucket sizes (max size,
+total implied pairs, and largest-bucket pair share) and compares three policies without modifying
+\texttt{lsh.py}:
+\begin{enumerate}
+  \item \textbf{Pass-through (\texttt{none}):} keep all buckets as an unmitigated baseline.
+  \item \textbf{Size limit (\texttt{size\_limit}):} drop any bucket with more than $L$ members.
+  \item \textbf{Drop common shingles (\texttt{drop\_common\_shingles}):} prune shingles whose
+        document frequency exceeds \texttt{drop\_common\_share} in \texttt{ShingleConfig}.
+\end{enumerate}
+As a stretch alternative (#41), \texttt{salt\_split} (\texttt{src/verification/salt\_split.py})
+partitions oversized buckets into $k$ chunks and emits chunk-pair sub-buckets so all candidate pairs
+are preserved while work spreads across tasks.
+
+\subsection{Frequent-Tagset Blocking with SON (E6)}
+To study whether topic partitioning reduces LSH work (Q4), we implement the two-pass Savasere,
+Omiecinski, and Navathe (SON) algorithm \cite{savasere1995son} with Apriori
+\cite{agrawal1994apriori} in Spark RDDs (\texttt{src/blocking/son.py}). Pass~1 mines locally
+frequent tagsets per partition at scaled threshold $s \cdot |P_i|$; Pass~2 counts exact global
+support across all baskets. Using the discovered frequent tagsets, \texttt{src/blocking/blocking.py}
+assigns each question to its largest frequent tagset (breaking ties by lowest global support, or
+\texttt{other} if none match) and outputs Contract C9 (\texttt{post\_id}, \texttt{group}) for
+\texttt{lsh.py --groups}, alongside \texttt{single\_tag} and \texttt{none} baselines.
+}
+
+\newcommand{\wsthreeResults}{%
+\subsection{Verification, Blocking, and Bucket Results (E4, E6, E7)}
+On the 5,000-question Super User sample (word 1-gram title shingles, $n=128$, $b=32$, $r=4$), exact
+Jaccard verification re-scores 13,417 top-10 candidate pairs across 2,780 queries with candidates
+% source: results/e4_verification/ranking_comparison.csv
+(Table~\ref{tab:e4-verification}). Estimated MinHash overstates similarity on average ($0.265423$ vs.
+$0.250672$ exact), and exact verification changes the top-1 candidate for $17.70\%$ of queries
+% source: results/e4_verification/ranking_comparison.csv
+(top-1 agreement $82.30\%$, mean absolute rank shift $0.937854$ positions).
+
+\begin{table}[h]
+  \centering
+  \caption{E4 ranking comparison on 5,000 Super User questions ($2{,}780$ queries, $13{,}417$ ranked pairs).}
+  \label{tab:e4-verification}
+  \begin{tabular}{lccc}
+    \toprule
+    Method & Mean Score & Top-1 Agreement & Mean Rank Shift \\
+    \midrule
+    Estimated MinHash & $0.265423$ & $0.823022$ & $0.937854$ \\ % source: results/e4_verification/ranking_comparison.csv
+    Exact Jaccard     & $0.250672$ & $1.000000$ & $0.000000$ \\ % source: results/e4_verification/ranking_comparison.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+For E6 SON mining on Super User ($516{,}669$ questions),
+% source: docs/report/ws1_intro_data_eval.tex (Super User question count)
+two-pass SON finds $52$ frequent tagsets in $77.4713$\,s versus $34.5360$\,s for MLlib
+\texttt{FPGrowth}
+% source: results/e6_blocking/frequent_tagsets.csv
+while matching its frequent itemsets exactly.
+% TODO(#17): insert full Python-subset E6 comparison table (time, shuffle, n_candidates, recall@10, map, recall_cost).
+% TODO(#30): insert full Python-subset E7 bucket profile and size_limit vs. drop_common_shingles comparison table.
+}
+
+\newcommand{\wsthreeAnalysis}{%
+\subsection{Verification, Blocking, and Skew Challenges}
+\paragraph{Why verification matters.} LSH candidate generation admits pairs whose band hashes happen
+to collide, inflating \texttt{est\_sim} above true Jaccard. Exact C2 verification eliminates this
+variance cheaply after LSH has already pruned the quadratic search space.
+
+\paragraph{Big-bucket skew and checkpoint cuts.} Skewed buckets degrade Spark stage tail latency
+and executor memory. \texttt{size\_limit} bounds worst-case bucket work at the cost of dropping
+oversized buckets, whereas \texttt{drop\_common\_shingles} prevents common tokens from forming huge
+buckets earlier in Stage C1 $\to$ C2.
+% TODO(#30,#41): state final scaling-run bucket strategy and whether E7 salt_split / E4 TF-IDF stretch runs were cut at the checkpoint.
+
+\paragraph{Tag blocking trade-off.} Blocking by frequent tagsets shrinks candidate comparisons
+within topics, but any duplicate pair whose questions do not share the same assigned group incurs
+\texttt{recall\_cost} across group boundaries.
+}
+
+\newcommand{\wsthreeContribution}{%
+\paragraph{Navjot Singh Shienh (WS3: Candidate Refinement, Blocking, and Report Assembly).}
+Implemented exact Jaccard verification (\texttt{verify.py}, \texttt{rankers.py}, E4) and TF-IDF
+cosine re-ranking (\texttt{rerank.py}); two-pass Spark RDD SON mining and tag-blocking assignment
+(\texttt{son.py}, \texttt{blocking.py}, E6); big-bucket profiling, \texttt{size\_limit}
+comparison, and \texttt{salt\_split} (\texttt{buckets.py}, \texttt{salt\_split.py}, E7); Laptop~B
+Spark cluster integration; and the LaTeX report assembly and validation tooling (\texttt{main.tex},
+\texttt{refs.bib}, \texttt{check\_report.py}).
+}
