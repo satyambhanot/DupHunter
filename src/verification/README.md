@@ -18,6 +18,13 @@ python -m src.verification.verify --input data/candidates --shingles data/shingl
     --output results/e4_verification/ranking_comparison.csv --method both --master local[*]
 ```
 
+## Using E7 Big-Bucket Comparison (#30)
+
+```bash
+python -m src.verification.buckets --posts data/posts --answer-key data/answer_key \
+    --output results/e7_buckets/bucket_comparison.csv --master local[*]
+```
+
 ## Tests
 
 ```bash
