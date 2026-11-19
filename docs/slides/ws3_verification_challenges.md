@@ -12,7 +12,7 @@
   - Estimated mean score: `0.2654` vs. Exact Jaccard mean score: `0.2507`
   - Top-1 agreement: `82.30%` (exact verification changes `#1` on `17.70%` of queries)
   - Mean absolute rank shift: `0.94` positions
-- **Stretch (`#40`):** `TfidfReranker` (`rerank.py`) adds TF-IDF cosine scoring on top-$k$ candidates to weight rare technical terms higher.
+- **Stretch (`#40`):** `TfidfRanker` (`rerank.py`) adds TF-IDF cosine scoring on top-$k$ candidates to weight rare technical terms higher.
 
 ---
 

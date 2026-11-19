@@ -18,10 +18,11 @@ the C2 shingle sets and compute exact Jaccard similarity:
   J(A, B) = \frac{|A \cap B|}{|A \cup B|}.
 \end{equation}
 A shared \texttt{Ranker} protocol (\texttt{src/verification/rankers.py}) supports both
-\texttt{EstimatedRanker} and \texttt{ExactJaccardRanker}. As a stretch extension (#40),
-\texttt{TfidfReranker} (\texttt{src/verification/rerank.py}) computes unit-normalized TF-IDF
+\texttt{EstimatedRanker} and \texttt{ExactJaccardRanker}. As a stretch extension (\#40),
+\texttt{TfidfRanker} (\texttt{src/verification/rerank.py}) computes unit-normalized TF-IDF
 cosine similarity \cite{salton1988tfidf} over the top-$k$ verified candidates per query to resolve
 lexical ties using rare-term weights.
+% TODO(#40): reword if TF-IDF re-ranking is cut at the checkpoint.
 
 \subsection{Big-Bucket Skew Mitigation (E7)}
 Popular or boilerplate title shingles can push many questions into a single LSH bucket, turning a
@@ -35,16 +36,17 @@ total implied pairs, and largest-bucket pair share) and compares three policies 
   \item \textbf{Drop common shingles (\texttt{drop\_common\_shingles}):} prune shingles whose
         document frequency exceeds \texttt{drop\_common\_share} in \texttt{ShingleConfig}.
 \end{enumerate}
-As a stretch alternative (#41), \texttt{salt\_split} (\texttt{src/verification/salt\_split.py})
+As a stretch alternative (\#41), \texttt{salt\_split} (\texttt{src/verification/salt\_split.py})
 partitions oversized buckets into $k$ chunks and emits chunk-pair sub-buckets so all candidate pairs
 are preserved while work spreads across tasks.
+% TODO(#41): drop this paragraph if salt_split is cut at the checkpoint.
 
 \subsection{Frequent-Tagset Blocking with SON (E6)}
 To study whether topic partitioning reduces LSH work (Q4), we implement the two-pass Savasere,
 Omiecinski, and Navathe (SON) algorithm \cite{savasere1995son} with Apriori
 \cite{agrawal1994apriori} in Spark RDDs (\texttt{src/blocking/son.py}). Pass~1 mines locally
 frequent tagsets per partition at scaled threshold $s \cdot |P_i|$; Pass~2 counts exact global
-support across all baskets. Using the discovered frequent tagsets, \texttt{src/blocking/blocking.py}
+support across all baskets. Using the discovered frequent tagsets, \texttt{src/blocking/\allowbreak blocking.py}
 assigns each question to its largest frequent tagset (breaking ties by lowest global support, or
 \texttt{other} if none match) and outputs Contract C9 (\texttt{post\_id}, \texttt{group}) for
 \texttt{lsh.py --groups}, alongside \texttt{single\_tag} and \texttt{none} baselines.
@@ -62,13 +64,15 @@ $0.250672$ exact), and exact verification changes the top-1 candidate for $17.70
 
 \begin{table}[h]
   \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
   \caption{E4 ranking comparison on 5,000 Super User questions ($2{,}780$ queries, $13{,}417$ ranked pairs).}
   \label{tab:e4-verification}
-  \begin{tabular}{lccc}
+  \begin{tabular}{@{}lccc@{}}
     \toprule
-    Method & Mean Score & Top-1 Agreement & Mean Rank Shift \\
+    Method & Mean score & Top-1 agree. & Rank shift \\
     \midrule
-    Estimated MinHash & $0.265423$ & $0.823022$ & $0.937854$ \\ % source: results/e4_verification/ranking_comparison.csv
+    Estimated & $0.265423$ & $0.823022$ & $0.937854$ \\ % source: results/e4_verification/ranking_comparison.csv
     Exact Jaccard     & $0.250672$ & $1.000000$ & $0.000000$ \\ % source: results/e4_verification/ranking_comparison.csv
     \bottomrule
   \end{tabular}
@@ -109,4 +113,5 @@ cosine re-ranking (\texttt{rerank.py}); two-pass Spark RDD SON mining and tag-bl
 comparison, and \texttt{salt\_split} (\texttt{buckets.py}, \texttt{salt\_split.py}, E7); Laptop~B
 Spark cluster integration; and the LaTeX report assembly and validation tooling (\texttt{main.tex},
 \texttt{refs.bib}, \texttt{check\_report.py}).
+% TODO(#40,#41): remove rerank.py and salt_split.py from this list if either is cut at the checkpoint.
 }
