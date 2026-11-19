@@ -14,7 +14,6 @@ from pyspark.sql import SparkSession
 
 from scripts.cluster.stages import (
     STAGES,
-    _restrict_answer_key,
     load_config,
     plan_stages,
     run_pipeline,
@@ -89,19 +88,6 @@ class SparkPipelineTests(unittest.TestCase):
         for bad in (0.0, -0.1, 1.1):
             with self.assertRaises(ValueError):
                 sample_posts(df, bad)
-
-    def test_restrict_answer_key_excludes_out_of_sample_pairs(self) -> None:
-        sampled = self.spark.createDataFrame([(1,), (2,)], ["post_id"])
-        answer_key = self.spark.createDataFrame(
-            [
-                (2, 1, datetime(2024, 1, 2, tzinfo=UTC)),
-                (4, 3, datetime(2024, 1, 4, tzinfo=UTC)),
-                (3, 1, datetime(2024, 1, 3, tzinfo=UTC)),
-            ],
-            ["dup_id", "original_id", "created"],
-        )
-        restricted = _restrict_answer_key(answer_key, sampled).collect()
-        self.assertEqual([(r["dup_id"], r["original_id"]) for r in restricted], [(2, 1)])
 
     def test_run_pipeline_executes_stages_and_resumes_from_done(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]

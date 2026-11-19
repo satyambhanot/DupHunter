@@ -12,6 +12,8 @@ from typing import Protocol
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
+from src.verification.rerank import TfidfRanker
+
 C5_COLUMNS = ["dup_id", "cand_id", "rank", "score", "method"]
 
 
@@ -140,4 +142,5 @@ class ExactJaccardRanker:
 RANKERS: dict[str, Ranker] = {
     "estimated": EstimatedRanker(),
     "exact_jaccard": ExactJaccardRanker(),
+    "tfidf": TfidfRanker(),
 }
