@@ -91,6 +91,52 @@ class TestCheckReportHelpers:
         ok, _ = run_checks(main_tex, bib_path, strict_sources=True)
         assert not ok
 
+    def test_unsourced_numbers_ignores_math_labels_and_references(self, tmp_path: Path) -> None:
+        tex = tmp_path / "frag.tex"
+        tex.write_text(
+            "\n".join(
+                [
+                    r"\begin{equation}",
+                    r"  \text{hash}(t) \bmod (2^{31}-1) + 17",
+                    r"\end{equation}",
+                    r"\[ P = 1 - (1 - s^4)^32 \]",
+                    r"As a stretch extension (\#40), Pass~1 mines sets with 3-gram shingles",
+                    r"through Contract Hook 1 and reports Precision@10 and NDCG@10.",
+                    r"\setlength{\tabcolsep}{3pt}",
+                    r"We use $k = 3$ and $\{1, 5\}$.",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        assert find_unsourced_numbers([tex]) == []
+
+    def test_unsourced_numbers_source_covers_its_whole_paragraph(self, tmp_path: Path) -> None:
+        tex = tmp_path / "frag.tex"
+        tex.write_text(
+            "\n".join(
+                [
+                    "The model finds 11.5\\% of duplicates,",
+                    "ranks them by 0.42 and misses",
+                    "29.8\\% of them in total.",
+                    "% source: results/e3_lsh_real/README.md",
+                    "",
+                    "A separate paragraph reports 2,780 queries.",
+                    "",
+                    "A table row follows",
+                    "A & 0.25 & 0.5 \\\\",
+                    "B & 0.35 & 0.6 \\\\ % source: results/x.csv",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        findings = find_unsourced_numbers([tex])
+        assert [(lineno) for _, lineno, _ in findings] == [6]
+
+    def test_real_numbers_in_prose_are_still_reported(self, tmp_path: Path) -> None:
+        tex = tmp_path / "frag.tex"
+        tex.write_text("Recall@10 was 0.85 on the full run.\n", encoding="utf-8")
+        assert [lineno for _, lineno, _ in find_unsourced_numbers([tex])] == [1]
+
 
 class TestRepoReportFiles:
     """Verify the repository report skeleton and bibliography pass checks."""
