@@ -14,7 +14,7 @@ from typing import Any
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from src.evaluation.evaluate import append_metrics, evaluate, per_pair_table
+from src.evaluation.evaluate import append_metrics, evaluate, per_pair_table, restrict_answer_key
 from src.similarity.lsh import LSHConfig, find_candidates, resolve_bucket_policy
 from src.similarity.minhash import MinHashConfig, build_signatures
 from src.similarity.shingles import ShingleConfig, build_shingles
@@ -112,19 +112,6 @@ def _prepare_text_inputs(posts_text: DataFrame, fields: str) -> DataFrame:
     if fields == "title+body":
         return posts_text
     raise ValueError(f"Unsupported shingles.fields {fields!r}; expected 'title' or 'title+body'")
-
-
-def _restrict_answer_key(answer_key: DataFrame, sampled_ids: DataFrame) -> DataFrame:
-    """Keep only answer-key pairs whose dup_id and original_id are both in ``sampled_ids``."""
-    return answer_key.join(
-        sampled_ids.select(F.col("post_id").alias("dup_id")),
-        on="dup_id",
-        how="left_semi",
-    ).join(
-        sampled_ids.select(F.col("post_id").alias("original_id")),
-        on="original_id",
-        how="left_semi",
-    )
 
 
 def _resolve_settings(
@@ -270,7 +257,7 @@ def run_pipeline(
                 sigs_ids = _read_parquet(spark, paths["minhash"]).select("post_id")
                 if n_questions is None:
                     n_questions = sigs_ids.count()
-                scoped_key = _restrict_answer_key(answer_key_df, sigs_ids)
+                scoped_key = restrict_answer_key(answer_key_df, sigs_ids)
                 candidates_df = _read_parquet(spark, paths["lsh"])
                 metrics = evaluate(candidates_df, scoped_key, n_questions=n_questions)
                 run_settings = {

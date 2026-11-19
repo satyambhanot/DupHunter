@@ -13,6 +13,9 @@ from src.verification.verify import (
     verify_candidates,
     write_comparison_csv,
 )
+from src.verification.verify import (
+    main as verify_main,
+)
 
 
 class TestRankers:
@@ -182,3 +185,21 @@ class TestVerifyComparisonAndCLI:
         assert custom.top_k == 5
         assert custom.min_jaccard == 0.2
         assert custom.master == "local[2]"
+
+    def test_verify_main_rejects_tfidf_csv_output(self, capsys) -> None:
+        with pytest.raises(SystemExit):
+            verify_main(
+                [
+                    "--input",
+                    "c.parquet",
+                    "--shingles",
+                    "s.parquet",
+                    "--posts",
+                    "p.parquet",
+                    "--method",
+                    "tfidf",
+                    "--output",
+                    "out.csv",
+                ]
+            )
+        assert "src.verification.rerank" in capsys.readouterr().err

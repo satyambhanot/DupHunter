@@ -147,3 +147,35 @@ class TestBucketComparison:
             assert reader.fieldnames == list(COMPARISON_COLUMNS)
             csv_rows = list(reader)
         assert [r["strategy"] for r in csv_rows] == ["none", "size_limit", "drop_common_shingles"]
+
+    def test_compare_scores_a_sample_against_its_own_answer_key(self, spark) -> None:
+        posts = spark.createDataFrame(
+            [
+                (1, 100, "python list sort", "x"),
+                (2, 200, "python list sort", "x"),
+                (3, 300, "django postgres", "x"),
+            ],
+            ["post_id", "created", "title", "body"],
+        )
+        # (900, 800) is outside the sample: it must not count as a lost pair
+        answer_key = spark.createDataFrame(
+            [(2, 1), (900, 800)],
+            ["dup_id", "original_id"],
+        )
+        (row,) = compare_bucket_strategies(
+            posts=posts,
+            answer_key=answer_key,
+            strategies=("none",),
+            num_perm=16,
+            bands=4,
+            rows_per_band=4,
+        )
+        assert row["total_answer_pairs"] == 1
+        assert row["lost_answer_pairs"] == 0
+        assert row["recall@10"] == 1.0
+
+    def test_compare_rejects_unknown_fields(self, spark) -> None:
+        posts = spark.createDataFrame([(1, 1, "t", "b")], ["post_id", "created", "title", "body"])
+        key = spark.createDataFrame([(1, 1)], ["dup_id", "original_id"])
+        with pytest.raises(ValueError, match="fields"):
+            compare_bucket_strategies(posts, key, fields="body")

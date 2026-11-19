@@ -14,7 +14,7 @@ from pathlib import Path
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from src.evaluation.evaluate import evaluate
+from src.evaluation.evaluate import evaluate, restrict_answer_key
 from src.similarity.lsh import LSHConfig, find_candidates, pass_through_policy
 from src.similarity.lsh import size_limit as _lsh_size_limit
 from src.similarity.minhash import MinHashConfig, build_signatures
@@ -220,50 +220,82 @@ def compare_bucket_strategies(
     strategies: Sequence[str] = DEFAULT_STRATEGIES,
     bucket_limit: int = 1000,
     drop_common_share: float = 0.05,
-    shingle_k: int = 5,
-    num_perm: int = 120,
-    bands: int = 30,
+    shingle_k: int = 1,
+    num_perm: int = 128,
+    bands: int = 32,
     rows_per_band: int = 4,
     output_path: str | Path | None = None,
+    fields: str = "title",
 ) -> list[dict[str, object]]:
-    """Run and compare E7 big-bucket strategies on candidate count, Recall@10, and lost pairs."""
-    n_questions = posts.count()
+    """Run and compare E7 big-bucket strategies on candidate count, Recall@10, and lost pairs.
+
+    The defaults are the project settings of E1 to E3 (word 1-grams of the title, 128 hashes,
+    32 bands of 4 rows). Signatures are built once per shingle setting, and ``time_sec`` times
+    only the LSH step (``find_candidates`` plus a ``count``), so the strategies are comparable.
+    The answer key is restricted to the questions in ``posts`` before scoring.
+
+    The task-time, shuffle and memory columns are left empty: they come from the Spark event log
+    of a cluster run, not from this function.
+    """
+    if fields not in ("title", "title+body"):
+        raise ValueError(f"fields must be 'title' or 'title+body', got {fields!r}")
+    text = posts.withColumn("body", F.lit("")) if fields == "title" else posts
+    answer_key = restrict_answer_key(answer_key, posts)
+    n_questions = posts.select("post_id").distinct().count()
+    extra_cols = [c for c in ("created", "group") if c in posts.columns]
+    mh_cfg = MinHashConfig(n=num_perm)
+    lsh_cfg = LSHConfig(b=bands, r=rows_per_band, n=num_perm)
+
+    signatures_by_share: dict[float | None, DataFrame] = {}
+
+    def signatures_for(share: float | None) -> DataFrame:
+        if share not in signatures_by_share:
+            shingled = build_shingles(
+                text, config=ShingleConfig(k=shingle_k, drop_common_share=share)
+            )
+            sigs = build_signatures(shingled, config=mh_cfg)
+            if extra_cols:
+                sigs = sigs.join(posts.select("post_id", *extra_cols), "post_id", "left")
+            sigs = sigs.cache()
+            sigs.count()  # materialise outside the timed block
+            signatures_by_share[share] = sigs
+        return signatures_by_share[share]
+
     results: list[dict[str, object]] = []
+    try:
+        for strategy in strategies:
+            share_cfg, policy = _build_strategy_spec(strategy, bucket_limit, drop_common_share)
+            sigs = signatures_for(share_cfg)
 
-    for strategy in strategies:
-        share_cfg, policy = _build_strategy_spec(strategy, bucket_limit, drop_common_share)
-        shingle_cfg = ShingleConfig(k=shingle_k, drop_common_share=share_cfg)
-        mh_cfg = MinHashConfig(n=num_perm)
-        lsh_cfg = LSHConfig(b=bands, r=rows_per_band, n=num_perm)
+            t0 = time.perf_counter()
+            candidates = find_candidates(sigs, config=lsh_cfg, bucket_policy=policy).cache()
+            candidates.count()
+            elapsed = time.perf_counter() - t0
 
-        t0 = time.perf_counter()
-        shingled = build_shingles(posts, config=shingle_cfg)
-        sigs = build_signatures(shingled, config=mh_cfg)
-        extra_cols = [c for c in ("created", "group") if c in posts.columns]
-        if extra_cols:
-            sigs = sigs.join(posts.select("post_id", *extra_cols), "post_id", "left")
-        candidates = find_candidates(sigs, config=lsh_cfg, bucket_policy=policy)
-        metrics = evaluate(candidates, answer_key, n_questions=n_questions)
-        lost_pairs, total_pairs, lost_share = count_lost_answer_pairs(candidates, answer_key)
-        elapsed = time.perf_counter() - t0
+            metrics = evaluate(candidates, answer_key, n_questions=n_questions)
+            lost_pairs, total_pairs, lost_share = count_lost_answer_pairs(candidates, answer_key)
+            candidates.unpersist()
 
-        results.append(
-            {
-                "strategy": strategy,
-                "bucket_limit": bucket_limit if strategy == "size_limit" else None,
-                "drop_common_share": share_cfg,
-                "time_sec": round(elapsed, 4),
-                "slowest_task_sec": None,
-                "median_task_sec": None,
-                "shuffle_bytes": None,
-                "memory_bytes": None,
-                "n_candidates": int(metrics["n_candidates"]),
-                "recall@10": round(float(metrics["recall@10"]), 6),
-                "lost_answer_pairs": lost_pairs,
-                "total_answer_pairs": total_pairs,
-                "lost_answer_share": round(lost_share, 6),
-            }
-        )
+            results.append(
+                {
+                    "strategy": strategy,
+                    "bucket_limit": bucket_limit if strategy == "size_limit" else None,
+                    "drop_common_share": share_cfg,
+                    "time_sec": round(elapsed, 4),
+                    "slowest_task_sec": None,
+                    "median_task_sec": None,
+                    "shuffle_bytes": None,
+                    "memory_bytes": None,
+                    "n_candidates": int(metrics["n_candidates"]),
+                    "recall@10": round(float(metrics["recall@10"]), 6),
+                    "lost_answer_pairs": lost_pairs,
+                    "total_answer_pairs": total_pairs,
+                    "lost_answer_share": round(lost_share, 6),
+                }
+            )
+    finally:
+        for sigs in signatures_by_share.values():
+            sigs.unpersist()
 
     if output_path is not None:
         _write_comparison_csv(output_path, results)
@@ -295,9 +327,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=0.05,
         help="Shingle document-frequency cutoff for drop_common_shingles.",
     )
-    parser.add_argument("--shingle-k", type=int, default=5, help="Shingle k-gram length.")
-    parser.add_argument("--num-perm", type=int, default=120, help="MinHash signature length.")
-    parser.add_argument("--bands", type=int, default=30, help="LSH band count.")
+    parser.add_argument(
+        "--fields",
+        choices=["title", "title+body"],
+        default="title",
+        help="Text that is shingled (default: title, as in E1 to E3).",
+    )
+    parser.add_argument("--shingle-k", type=int, default=1, help="Shingle k-gram length.")
+    parser.add_argument("--num-perm", type=int, default=128, help="MinHash signature length.")
+    parser.add_argument("--bands", type=int, default=32, help="LSH band count.")
     parser.add_argument("--rows", type=int, default=4, help="LSH rows per band.")
     parser.add_argument("--master", default=None, help="Optional Spark master URL.")
     return parser.parse_args(argv)
@@ -324,6 +362,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             bands=args.bands,
             rows_per_band=args.rows,
             output_path=args.output,
+            fields=args.fields,
         )
     finally:
         spark.stop()
