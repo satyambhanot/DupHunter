@@ -11,8 +11,22 @@ from pathlib import Path
 _INPUT_RE = re.compile(r"\\(?:input|include)\{([^}]+)\}")
 _CITE_RE = re.compile(r"\\cite[pt]?(?:\[[^\]]*\])*\{([^}]+)\}")
 _BIB_KEY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)\s*,")
-_NUMBER_RE = re.compile(r"(?<![A-Za-z0-9_\\.-])\d+(?:,\d{3})*(?:\.\d+)?%?")
+_NUMBER_RE = re.compile(r"(?<![A-Za-z0-9_\\.#@-])\d+(?:,\d{3})*(?:\.\d+)?%?")
 _STRIP_MATH_RE = re.compile(r"\$[^$]*\$")
+_MATH_BEGIN_RE = re.compile(
+    r"\\begin\{(?:equation|align|alignat|gather|multline|eqnarray|displaymath|math)\*?\}|\\\["
+)
+_MATH_END_RE = re.compile(
+    r"\\end\{(?:equation|align|alignat|gather|multline|eqnarray|displaymath|math)\*?\}|\\\]"
+)
+# Numbers that name or count things rather than report a result: issue references (\#40), layout
+# settings, "Pass~1", "Hook 1", "Section 5", "Table~2", and "3-gram" / "5-g" shingle sizes.
+_LABEL_NUMBER_RE = re.compile(
+    r"\\#\d+"
+    r"|\\(?:setlength|addtolength|setcounter|vspace|hspace)\*?\{[^}]*\}\{[^}]*\}"
+    r"|\b(?:Pass|Hook|Section|Sections|Stage|Table|Figure|Fig\.|Experiment|Question|Q)[~ ]?\d+"
+    r"|\b\d+-(?:grams?|g)\b"
+)
 _STRIP_CMD_ARG_RE = re.compile(
     r"\\(?:section|subsection|paragraph|label|ref|cite[pt]?|input|include|includegraphics|graphicspath|usepackage|documentclass|author|date|title)\*?(?:\[[^\]]*\])?\{[^}]*\}"
 )
@@ -86,19 +100,58 @@ def find_missing_citations(tex_files: Iterable[Path], bib_path: Path) -> list[st
     return sorted(cited - bib_keys)
 
 
+def _math_line_flags(lines: Sequence[str]) -> list[bool]:
+    """Flag the lines inside a display-math environment (``equation``, ``\\[ ... \\]``, ...)."""
+    flags: list[bool] = []
+    inside = False
+    for line in lines:
+        code = re.split(r"(?<!\\)%", line, maxsplit=1)[0]
+        began = bool(_MATH_BEGIN_RE.search(code))
+        ended = bool(_MATH_END_RE.search(code))
+        flags.append(inside or began)
+        if began and not ended:
+            inside = True
+        elif ended:
+            inside = False
+    return flags
+
+
+def _has_source_tag(line: str) -> bool:
+    return "% source:" in line or "% TODO" in line
+
+
 def find_unsourced_numbers(tex_files: Iterable[Path]) -> list[tuple[Path, int, str]]:
-    """Return lines with numeric values lacking a ``% source:`` or ``% TODO`` tag."""
+    """Return lines with numeric values lacking a ``% source:`` or ``% TODO`` tag.
+
+    A tag covers its own line, the line before and after it, and every other line of the same
+    paragraph or table (the lines up to the next blank line). Not counted as results: display
+    math, numbers inside ``$...$``, issue references such as ``\\#40``, layout settings, and
+    labels such as ``Pass~1`` or ``3-gram``.
+    """
     findings: list[tuple[Path, int, str]] = []
     for tex_path in tex_files:
         lines = tex_path.read_text(encoding="utf-8").splitlines()
+        in_math = _math_line_flags(lines)
+
+        block_ids: list[int] = []
+        block = 0
+        for line in lines:
+            if not line.strip():
+                block += 1
+            block_ids.append(block)
+        sourced_blocks = {block_ids[i] for i, line in enumerate(lines) if _has_source_tag(line)}
+
         for idx, line in enumerate(lines):
             stripped = line.strip()
-            if not stripped or stripped.startswith("%"):
+            if not stripped or stripped.startswith("%") or in_math[idx]:
                 continue
             window = " ".join(lines[max(0, idx - 1) : min(len(lines), idx + 2)])
-            if "% source:" in window or "% TODO" in window:
+            if _has_source_tag(window) or block_ids[idx] in sourced_blocks:
                 continue
-            cleaned = _STRIP_CMD_ARG_RE.sub(" ", _STRIP_MATH_RE.sub(" ", line))
+            code = re.split(r"(?<!\\)%", line, maxsplit=1)[0]
+            cleaned = _STRIP_CMD_ARG_RE.sub(
+                " ", _LABEL_NUMBER_RE.sub(" ", _STRIP_MATH_RE.sub(" ", code))
+            )
             if _NUMBER_RE.search(cleaned):
                 findings.append((tex_path, idx + 1, stripped))
     return findings
