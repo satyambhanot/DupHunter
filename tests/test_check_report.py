@@ -74,6 +74,23 @@ class TestCheckReportHelpers:
         assert len(findings) == 1
         assert findings[0][1] == 1
 
+    def test_cite_with_optional_arguments_is_checked(self) -> None:
+        tex = r"See \cite[p.~3]{known} and \citep[see][Ch.~3]{other} and \cite{plain}."
+        assert extract_citations(tex) == {"known", "other", "plain"}
+
+    def test_run_checks_lists_each_unsourced_line(self, tmp_path: Path) -> None:
+        main_tex = tmp_path / "main.tex"
+        main_tex.write_text("Recall was 0.85 on Super User.\n", encoding="utf-8")
+        bib_path = tmp_path / "refs.bib"
+        bib_path.write_text("@article{known, title={OK}}", encoding="utf-8")
+
+        ok, messages = run_checks(main_tex, bib_path)
+        assert ok  # a warning unless --strict-sources
+        assert any("main.tex:1: Recall was 0.85" in line for line in messages)
+
+        ok, _ = run_checks(main_tex, bib_path, strict_sources=True)
+        assert not ok
+
 
 class TestRepoReportFiles:
     """Verify the repository report skeleton and bibliography pass checks."""

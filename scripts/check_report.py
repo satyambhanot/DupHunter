@@ -9,7 +9,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 _INPUT_RE = re.compile(r"\\(?:input|include)\{([^}]+)\}")
-_CITE_RE = re.compile(r"\\cite[pt]?\{([^}]+)\}")
+_CITE_RE = re.compile(r"\\cite[pt]?(?:\[[^\]]*\])*\{([^}]+)\}")
 _BIB_KEY_RE = re.compile(r"@\w+\s*\{\s*([^,\s]+)\s*,")
 _NUMBER_RE = re.compile(r"(?<![A-Za-z0-9_\\.-])\d+(?:,\d{3})*(?:\.\d+)?%?")
 _STRIP_MATH_RE = re.compile(r"\$[^$]*\$")
@@ -143,8 +143,9 @@ def run_checks(
 
     unsourced = find_unsourced_numbers(tex_files)
     if unsourced:
-        msg = f"{len(unsourced)} line(s) with numbers lack '% source:' or '% TODO'"
+        msg = f"{len(unsourced)} line(s) with numbers lack '% source:' or '% TODO':"
         messages.append(msg)
+        messages.extend(f"  {path}:{lineno}: {text}" for path, lineno, text in unsourced)
         if strict_sources:
             ok = False
 
