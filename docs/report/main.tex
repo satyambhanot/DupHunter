@@ -1,0 +1,71 @@
+\documentclass[11pt,twocolumn]{article}
+
+\usepackage{amsmath,amssymb,booktabs,cite,graphicx,hyperref}
+\graphicspath{{../../}}
+
+\input{ws1_intro_data_eval}
+\input{ws2_method_similarity}
+\IfFileExists{ws3_method_verification.tex}{\input{ws3_method_verification}}{}
+\IfFileExists{ws4_system_scale.tex}{\input{ws4_system_scale}}{}
+
+\title{DupHunter: Scalable Near-Duplicate Question Detection on Stack Overflow with Spark MinHash-LSH}
+\author{ENSF 612 Project Team (WS1--WS4)}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% Section 1: Abstract
+\begin{abstract}
+We present DupHunter, an Apache Spark pipeline for near-duplicate question detection on Stack
+Exchange dumps using shingling, MinHash signatures, banded Locality-Sensitive Hashing (LSH), exact
+Jaccard verification, and SON frequent-tagset blocking.
+% TODO(#24): add final headline Recall@10, reduction ratio, and scaling numbers after cluster runs.
+\end{abstract}
+
+% Section 2: Introduction (WS1)
+\wsoneIntro
+
+% Section 3: Related Work (WS2)
+\wstwoRelated
+
+% Section 4: Dataset and Data Preparation (WS1)
+\wsoneDataset
+
+% Section 5: Method (WS2 + WS3)
+\wstwoMethodology
+\ifdefined\wsthreeMethodology\wsthreeMethodology\fi
+
+% Section 6: System and Cluster Design (WS4)
+\section{System and Cluster Design}
+\textbf{TODO:} WS4 architecture, cluster topology, and Spark memory/shuffle configuration.
+% TODO(#42): replace this line with the WS4 fragment.
+
+% Section 7: Experimental Design (WS1)
+\wsoneDesign
+
+% Section 8: Results (WS2 + WS3 + WS4)
+\wstwoResults
+\ifdefined\wsthreeResults\wsthreeResults\fi
+% TODO(#42): insert E8 cluster results tables and figures.
+
+% Section 9: Analysis and Discussion (WS2 + WS3 + WS4)
+\wstwoAnalysis
+\ifdefined\wsthreeAnalysis\wsthreeAnalysis\fi
+% TODO(#42): insert WS4 scaling analysis.
+
+% Section 10: Limitations, Scope Changes, and Conclusion
+\section{Limitations, Scope Changes, and Conclusion}
+\textbf{TODO:} summarize scope changes (AI impact and streaming dropped, checkpoint cuts) and conclusions.
+% TODO(#24): replace this line with the final text.
+
+% Section 11: Individual Contributions
+\wsoneContribution
+\wstwoContribution
+\ifdefined\wsthreeContribution\wsthreeContribution\fi
+% TODO(#42): add the WS4 individual contribution paragraph.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
