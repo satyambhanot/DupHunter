@@ -19,6 +19,23 @@ python -m src.verification.verify --input data/candidates --shingles data/shingl
     --output results/e4_verification/ranking_comparison.csv --method both --master local[*]
 ```
 
+## Using E7 Big-Bucket Comparison (#30)
+
+```bash
+python -m src.verification.buckets --posts data/posts --answer-key data/answer_key \
+    --output results/e7_buckets/bucket_comparison.csv --master local[*]
+```
+
+The defaults are the project settings from E1 to E3: word 1-grams of the title (`--fields title`,
+`--shingle-k 1`), 128 hashes, 32 bands of 4 rows. Change them only to study another setting. The
+answer key is first restricted to the questions in `--posts`, so a sample is scored against its own
+pairs. Signatures are built once per shingle setting and only the LSH step is timed
+(`time_sec`), so the strategies are comparable.
+
+`slowest_task_sec`, `median_task_sec`, `shuffle_bytes` and `memory_bytes` stay empty here. They come
+from the Spark event log of each cluster run (`src/scaling/eventlogs.py`, `scripts/parse_eventlogs.py`)
+and are merged in when the full run (#31) is done.
+
 ## Using TF-IDF Re-ranking (#40)
 
 ```bash
