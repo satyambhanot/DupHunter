@@ -69,7 +69,7 @@ All required intermediate and final datasets are verified present in HDFS (`hdfs
 
 ---
 
-## 4. Evaluation Metrics (`results/core_pipeline_metrics.csv`)
+## 4. Evaluation Metrics (`results/metrics.csv`)
 
 The metrics were computed by `src.evaluation.evaluate` using the official Stack Overflow Python duplicate question ground truth answer key (Contract C6):
 
