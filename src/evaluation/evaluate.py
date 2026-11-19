@@ -8,6 +8,9 @@ Inputs (contracts in docs/CONTRACTS.md):
 
 Outputs: one row appended to ``results/metrics.csv`` (C7) and, optionally, a per-pair table (C8).
 
+On a sample, pass ``--universe`` (a Parquet with ``post_id`` of the sampled questions). Without it
+every answer-key pair with a question outside the sample counts as a miss, and recall is too low.
+
 Example (run from the repository root)::
 
     python -m src.evaluation.evaluate --candidates data/candidates --answer-key data/answer_key \\
@@ -37,6 +40,19 @@ def rank_candidates(candidates: DataFrame) -> DataFrame:
         return candidates.select("dup_id", "cand_id", F.col("rank").cast("long").alias("rank"))
     order = Window.partitionBy("dup_id").orderBy(F.col("est_sim").desc(), F.col("cand_id").asc())
     return candidates.select("dup_id", "cand_id", F.row_number().over(order).alias("rank"))
+
+
+def restrict_answer_key(answer_key: DataFrame, universe: DataFrame) -> DataFrame:
+    """Keep the answer-key pairs whose ``dup_id`` and ``original_id`` are both in ``universe``.
+
+    Args:
+        answer_key: C6 duplicate pairs.
+        universe: any DataFrame with a ``post_id`` column: the questions that were searched.
+    """
+    ids = universe.select("post_id").distinct()
+    return answer_key.join(ids.withColumnRenamed("post_id", "dup_id"), "dup_id", "left_semi").join(
+        ids.withColumnRenamed("post_id", "original_id"), "original_id", "left_semi"
+    )
 
 
 def evaluate(
@@ -153,7 +169,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--experiment", required=True, help="experiment id, for example E3")
     parser.add_argument("--settings", default="{}", help="JSON with the settings of this run")
     parser.add_argument(
-        "--n-questions", type=int, help="questions searched, for the reduction ratio"
+        "--n-questions",
+        type=int,
+        help="questions searched, for the reduction ratio (default: the --universe size)",
+    )
+    parser.add_argument(
+        "--universe",
+        help="Parquet with post_id of the sampled questions: only answer-key pairs inside it count",
     )
     parser.add_argument(
         "--max-rank", type=int, default=DEFAULT_MAX_RANK, help="ignore ranks below this"
@@ -172,7 +194,13 @@ def main(argv: list[str] | None = None) -> int:
     spark = SparkSession.builder.master(args.master).appName("duphunter-evaluate").getOrCreate()
     candidates = spark.read.parquet(args.candidates)
     answer_key = spark.read.parquet(args.answer_key)
-    metrics = evaluate(candidates, answer_key, args.n_questions, args.max_rank)
+    n_questions = args.n_questions
+    if args.universe:
+        universe = spark.read.parquet(args.universe)
+        answer_key = restrict_answer_key(answer_key, universe)
+        if n_questions is None:
+            n_questions = universe.select("post_id").distinct().count()
+    metrics = evaluate(candidates, answer_key, n_questions, args.max_rank)
     append_metrics(args.out, args.experiment, settings, metrics)
     if args.per_pair_out:
         table = per_pair_table(
