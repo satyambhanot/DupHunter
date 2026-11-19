@@ -9,12 +9,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import pyarrow.parquet as pq
-from py4j.protocol import Py4JJavaError
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from src.evaluation.evaluate import evaluate
+from src.evaluation.evaluate import evaluate, restrict_answer_key
 from src.similarity.lsh import LSHConfig, find_candidates
 
 
@@ -58,8 +56,10 @@ def assign_son_groups(
     *,
     post_id_col: str = "post_id",
     tags_col: str = "tags",
+    exclude_tags: Sequence[str] = (),
 ) -> DataFrame:
     """Assign each question to its largest frequent tagset (lowest support on tie), else other."""
+    del exclude_tags
     ordered = sort_tagsets(tagsets or ())
     group_expr = F.lit("other")
     for ts in reversed(ordered):
@@ -73,20 +73,39 @@ def assign_son_groups(
     )
 
 
+DEFAULT_EXCLUDE_TAGS: tuple[str, ...] = ("python",)
+
+
 def assign_single_tag_groups(
     posts: DataFrame,
     tagsets: Sequence[FrequentTagset] | None = None,
     *,
     post_id_col: str = "post_id",
     tags_col: str = "tags",
+    exclude_tags: Sequence[str] = DEFAULT_EXCLUDE_TAGS,
 ) -> DataFrame:
-    """Assign each question to its first tag, or ``other`` when tags are empty."""
+    """Assign each question to its most frequent tag, or ``other`` when it has none left.
+
+    Tags in ``exclude_tags`` are ignored. On the python subset every question carries
+    ``python``, so grouping by it (or by the first tag, which is whatever the author typed first)
+    would put most questions into one group and make this mode the same as no blocking.
+    The most frequent tag is counted once over all questions; a tie goes to the tag whose
+    name sorts last, so the result does not depend on the order of the tags.
+    """
     del tagsets
-    tags_arr = F.coalesce(F.col(tags_col), F.array())
-    group_expr = F.when(F.size(tags_arr) > 0, F.element_at(tags_arr, 1)).otherwise(F.lit("other"))
-    return posts.select(
-        F.col(post_id_col).alias("post_id"),
-        group_expr.alias("group"),
+    tags = F.coalesce(F.col(tags_col), F.array().cast("array<string>"))
+    kept = F.filter(F.array_distinct(tags), lambda tag: ~tag.isin(*exclude_tags))
+    prepared = posts.select(F.col(post_id_col).alias("post_id"), kept.alias("_tags"))
+    exploded = prepared.select("post_id", F.explode("_tags").alias("_tag"))
+    frequencies = exploded.groupBy("_tag").count()
+    best = (
+        exploded.join(F.broadcast(frequencies), "_tag")
+        .groupBy("post_id")
+        .agg(F.max(F.struct(F.col("count"), F.col("_tag"))).alias("_best"))
+        .select("post_id", F.col("_best.`_tag`").alias("_group"))
+    )
+    return prepared.join(best, "post_id", "left").select(
+        "post_id", F.coalesce(F.col("_group"), F.lit("other")).alias("group")
     )
 
 
@@ -96,9 +115,10 @@ def assign_no_groups(
     *,
     post_id_col: str = "post_id",
     tags_col: str = "tags",
+    exclude_tags: Sequence[str] = (),
 ) -> DataFrame:
     """Assign all questions to a single ``all`` group (no blocking)."""
-    del tagsets, tags_col
+    del tagsets, tags_col, exclude_tags
     return posts.select(
         F.col(post_id_col).alias("post_id"),
         F.lit("all").alias("group"),
@@ -119,20 +139,33 @@ def assign_groups(
     *,
     post_id_col: str = "post_id",
     tags_col: str = "tags",
+    exclude_tags: Sequence[str] = DEFAULT_EXCLUDE_TAGS,
 ) -> DataFrame:
-    """Assign Contract C9 ``(post_id, group)`` rows using the requested blocking mode."""
+    """Assign Contract C9 ``(post_id, group)`` rows using the requested blocking mode.
+
+    ``exclude_tags`` only matters for ``single_tag``. ``son`` needs ``tagsets``: without them
+    every question would land in ``other``, so that is an error.
+    """
     if mode not in STRATEGIES:
         raise ValueError(f"Unknown blocking mode {mode!r}; choose from {sorted(STRATEGIES)}")
+    if mode == "son" and not tagsets:
+        raise ValueError("mode 'son' needs the frequent tagsets (--tagsets), got none")
     return STRATEGIES[mode](
         posts,
         tagsets=tagsets,
         post_id_col=post_id_col,
         tags_col=tags_col,
+        exclude_tags=exclude_tags,
     )
 
 
 def compute_recall_cost(groups: DataFrame, answer_key: DataFrame) -> float:
-    """Return share of ``answer_key`` pairs whose questions fall into different groups."""
+    """Return the share of answer-key pairs whose questions fall into different groups.
+
+    Only pairs whose two questions both appear in ``groups`` are counted, so scoring a sample
+    does not count pairs outside it as split.
+    """
+    answer_key = restrict_answer_key(answer_key, groups)
     total = answer_key.count()
     if total == 0:
         return 0.0
@@ -147,11 +180,7 @@ def compute_recall_cost(groups: DataFrame, answer_key: DataFrame) -> float:
     joined = answer_key.join(
         dup_groups, answer_key["dup_id"] == dup_groups["_dup_id"], "left"
     ).join(orig_groups, answer_key["original_id"] == orig_groups["_orig_id"], "left")
-    split_count = joined.filter(
-        F.col("_dup_group").isNull()
-        | F.col("_orig_group").isNull()
-        | (F.col("_dup_group") != F.col("_orig_group"))
-    ).count()
+    split_count = joined.filter(F.col("_dup_group") != F.col("_orig_group")).count()
     return float(split_count) / float(total)
 
 
@@ -164,14 +193,23 @@ def compare_blocking(
     modes: Sequence[str] = ("none", "single_tag", "son"),
     lsh_config: LSHConfig | None = None,
     n_questions: int | None = None,
+    exclude_tags: Sequence[str] = DEFAULT_EXCLUDE_TAGS,
 ) -> list[dict[str, object]]:
-    """Run LSH with each blocking mode and collect time, candidates, Recall@10, MAP, recall_cost."""
+    """Run LSH with each blocking mode and collect time, candidates, Recall@10, MAP, recall_cost.
+
+    The answer key is first restricted to the questions in ``signatures``, so a sample is scored
+    against its own pairs. ``shuffle_bytes`` is left empty: it comes from the Spark event log of a
+    cluster run, not from this function.
+    """
     cfg = lsh_config or LSHConfig(b=32, r=4, n=128)
+    answer_key = restrict_answer_key(answer_key, signatures)
     total_q = n_questions if n_questions is not None else signatures.count()
     rows: list[dict[str, object]] = []
 
     for mode in modes:
-        groups_df = assign_groups(posts_tags, mode=mode, tagsets=tagsets).cache()
+        groups_df = assign_groups(
+            posts_tags, mode=mode, tagsets=tagsets, exclude_tags=exclude_tags
+        ).cache()
         cost = 0.0 if mode == "none" else compute_recall_cost(groups_df, answer_key)
         lsh_groups = None if mode == "none" else groups_df
 
@@ -195,15 +233,6 @@ def compare_blocking(
     return rows
 
 
-def _read_parquet(spark: SparkSession, path: str) -> DataFrame:
-    try:
-        return spark.read.parquet(path)
-    except Py4JJavaError:
-        if not Path(path).exists():
-            raise
-        return spark.createDataFrame(pq.read_table(path).to_pylist())
-
-
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for tag-blocking assignment and comparison."""
     parser = argparse.ArgumentParser(description="E6 tag-blocking assignment and LSH comparison.")
@@ -214,6 +243,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mode", choices=sorted(STRATEGIES), default="son")
     parser.add_argument("--groups-out", help="Write Contract C9 (post_id, group) Parquet here")
     parser.add_argument("--output", help="Write E6 comparison CSV here (runs all modes)")
+    parser.add_argument(
+        "--exclude-tag",
+        action="append",
+        default=None,
+        help="Tag ignored by single_tag grouping (repeatable; default: python)",
+    )
     parser.add_argument("-b", "--bands", type=int, default=32)
     parser.add_argument("-r", "--rows", type=int, default=4)
     parser.add_argument("--master", default="local[*]")
@@ -224,23 +259,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for assigning C9 groups or comparing blocking modes."""
     args = parse_args(argv)
     tagsets = load_frequent_tagsets(args.tagsets) if args.tagsets else []
+    exclude_tags = tuple(args.exclude_tag) if args.exclude_tag else DEFAULT_EXCLUDE_TAGS
+    if not tagsets and (args.output or (args.groups_out and args.mode == "son")):
+        raise SystemExit("error: --tagsets is required for the 'son' mode and for --output")
     spark = SparkSession.builder.master(args.master).appName("duphunter-e6-blocking").getOrCreate()
     try:
-        posts_tags = _read_parquet(spark, args.posts_tags)
+        posts_tags = spark.read.parquet(args.posts_tags)
         if args.groups_out:
-            groups_df = assign_groups(posts_tags, mode=args.mode, tagsets=tagsets)
+            groups_df = assign_groups(
+                posts_tags, mode=args.mode, tagsets=tagsets, exclude_tags=exclude_tags
+            )
             groups_df.write.mode("overwrite").parquet(args.groups_out)
         if args.output:
             if not args.signatures or not args.answer_key:
                 raise ValueError("--signatures and --answer-key are required with --output")
-            sigs = _read_parquet(spark, args.signatures)
-            ak = _read_parquet(spark, args.answer_key)
+            sigs = spark.read.parquet(args.signatures)
+            ak = spark.read.parquet(args.answer_key)
             rows = compare_blocking(
                 sigs,
                 posts_tags,
                 ak,
                 tagsets,
                 lsh_config=LSHConfig(b=args.bands, r=args.rows, n=args.bands * args.rows),
+                exclude_tags=exclude_tags,
             )
             out = Path(args.output)
             out.parent.mkdir(parents=True, exist_ok=True)
