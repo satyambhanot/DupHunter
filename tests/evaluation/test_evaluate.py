@@ -133,3 +133,36 @@ def test_an_empty_answer_key_gives_zero_queries_and_no_error(spark):
     empty = spark.createDataFrame([], "dup_id long, original_id long, created timestamp")
     result = evaluate.evaluate(_cands(spark, [(10, 1, 0.9)]), empty, n_questions=10)
     assert result["n_queries"] == 0 and result["recall@10"] == 0.0
+
+
+def test_restrict_answer_key_keeps_pairs_with_both_questions_in_the_universe(spark):
+    key = _key(spark, [(2, 1), (4, 3), (3, 1)])
+    universe = spark.createDataFrame([(1,), (2,), (2,)], ["post_id"])  # a repeated id is harmless
+    kept = evaluate.restrict_answer_key(key, universe).collect()
+    assert [(r.dup_id, r.original_id) for r in kept] == [(2, 1)]
+    assert evaluate.restrict_answer_key(key, universe.limit(0)).count() == 0
+
+
+def test_a_sample_is_not_scored_against_pairs_outside_it(spark):
+    # Questions 1 and 2 are the sample; the pair (4, 3) is outside it and must not count as a miss.
+    candidates = _cands(spark, [(2, 1, 0.9)])
+    key = _key(spark, [(2, 1), (4, 3)])
+    universe = spark.createDataFrame([(1,), (2,)], ["post_id"])
+    whole = evaluate.evaluate(candidates, key, n_questions=2)
+    scoped = evaluate.evaluate(candidates, evaluate.restrict_answer_key(key, universe), 2)
+    assert whole["recall@10"] == pytest.approx(0.5)
+    assert scoped["recall@10"] == pytest.approx(1.0) and scoped["n_queries"] == 1
+
+
+def test_command_line_universe_restricts_the_key_and_sets_the_question_count(spark, tmp_path):
+    _cands(spark, [(2, 1, 0.9)]).write.parquet(str(tmp_path / "cands"))
+    _key(spark, [(2, 1), (4, 3)]).write.parquet(str(tmp_path / "key"))
+    spark.createDataFrame([(1,), (2,), (5,)], ["post_id"]).write.parquet(str(tmp_path / "sample"))
+    csv_path = tmp_path / "metrics.csv"
+    argv = ["--candidates", str(tmp_path / "cands"), "--answer-key", str(tmp_path / "key")]
+    argv += ["--out", str(csv_path), "--experiment", "E3", "--universe", str(tmp_path / "sample")]
+    assert evaluate.main(argv) == 0
+    with csv_path.open() as handle:
+        row = next(csv.DictReader(handle))
+    assert float(row["recall@10"]) == pytest.approx(1.0)
+    assert float(row["reduction_ratio"]) == pytest.approx(1 - 1 / 3)  # 1 candidate of 3 questions

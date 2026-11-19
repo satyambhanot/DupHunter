@@ -21,6 +21,10 @@ python -m src.evaluation.evaluate --candidates data/candidates --answer-key data
 - **Inputs:** candidates in contract C4 `(dup_id, cand_id, est_sim)` or C5 `(dup_id, cand_id, rank, score,
   method)`; the answer key in C6 `(dup_id, original_id, created)`. Only the questions of the answer key are
   evaluated. C4 is ranked by `est_sim` (highest first), ties by `cand_id` ascending.
+- **Samples: pass `--universe`.** Give it a Parquet with a `post_id` column holding the questions that were
+  searched (the C2 or C3 file of the sample works). Only answer-key pairs with both questions inside it are
+  scored, and `--n-questions` defaults to its size. Without it, every pair that has a question outside the
+  sample counts as a miss and recall is too low (`restrict_answer_key` is the same step as a function).
 - **Output:** one row appended to `results/metrics.csv` (C7): `experiment, settings_json, recall@1, recall@5,
   recall@10, precision@10, map, ndcg@10, reduction_ratio, n_candidates`. With `--per-pair-out` the per-pair table
   (C8) is written too, for the error analysis (#33).
