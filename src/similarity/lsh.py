@@ -436,13 +436,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=str,
-        default=None,
+        required=True,
         help="Path to input MinHash signatures Parquet (C3)",
     )
     parser.add_argument(
         "--output",
         type=str,
-        default=None,
+        required=True,
         help="Path to write candidate duplicate pairs Parquet (C4)",
     )
     parser.add_argument(
@@ -504,10 +504,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     """Run LSH banding pipeline from CLI."""
     args = parse_args(argv)
-
-    if not args.input or not args.output:
-        logger.info("DupHunter LSH module CLI ready. Use --help for usage.")
-        return
 
     spark = SparkSession.builder.master(args.master).appName("duphunter-lsh").getOrCreate()
 

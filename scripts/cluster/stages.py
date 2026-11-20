@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
+import subprocess
 import sys
 import time
 from collections.abc import Collection, Sequence
@@ -91,6 +93,21 @@ def stage_paths(output_root: str, fraction: float, setting_name: str = "chosen")
         "lsh": f"{frac_dir}/candidates/{setting_name}",
         "per_pair": f"{frac_dir}/per_pair/{setting_name}",
     }
+
+
+def git_commit() -> str | None:
+    """Short hash of the checkout the run was started from, or ``None`` outside a git checkout."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -266,6 +283,12 @@ def run_pipeline(
                     "b": int(setting["b"]),
                     "r": int(setting["r"]),
                     "n": int(setting.get("n") or int(setting["b"]) * int(setting["r"])),
+                    "bucket_policy": setting.get("bucket_policy"),
+                    "bucket_limit": setting.get("bucket_limit"),
+                    "shingles": {**dataclasses.asdict(shingle_config), "fields": shingle_fields},
+                    "minhash": dataclasses.asdict(minhash_config),
+                    "seed": seed,
+                    "commit": git_commit(),
                 }
                 append_metrics(
                     metrics_csv,

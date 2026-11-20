@@ -42,5 +42,5 @@
     "output_root": "hdfs:///data/core_pipeline/stackoverflow",
     "event_log_dir": "hdfs:///spark-logs"
   },
-  "metrics_out": "results/core_pipeline_metrics.csv"
+  "metrics_out": "results/metrics.csv"
 }

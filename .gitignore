@@ -35,3 +35,4 @@ checkpoint/
 # Tools
 .ruff_cache/
 .pytest_cache/
+results/e8_scaling/run_metrics/

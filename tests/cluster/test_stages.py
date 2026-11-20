@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from pyspark.sql import SparkSession
 
 from scripts.cluster.stages import (
     STAGES,
+    git_commit,
     load_config,
     plan_stages,
     run_pipeline,
@@ -231,6 +233,29 @@ class SparkPipelineTests(unittest.TestCase):
             )
             self.assertEqual(len(summaries), 1)
             self.assertTrue((Path(output_root) / "100pct" / "candidates" / "chosen").exists())
+
+            with open(metrics_csv, newline="") as handle:
+                (row,) = list(csv.DictReader(handle))
+            settings = json.loads(row["settings_json"])
+            self.assertEqual((settings["b"], settings["r"], settings["n"]), (32, 4, 128))
+            self.assertEqual(settings["bucket_policy"], "size_limit")
+            self.assertEqual(settings["bucket_limit"], 1000)
+            self.assertEqual(
+                settings["shingles"],
+                {"representation": "word", "k": 1, "drop_common_share": None, "fields": "title"},
+            )
+            self.assertEqual(settings["minhash"], {"n": 128, "seed": 42})
+            self.assertEqual(settings["seed"], 42)
+            self.assertIn("commit", settings)
+
+    def test_git_commit_is_a_short_hash_or_none(self) -> None:
+        commit = git_commit()
+        self.assertTrue(commit is None or 4 <= len(commit) <= 40)
+
+    def test_config_writes_metrics_to_the_contract_file(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        config = load_config(repo_root / "configs" / "full_run.json")
+        self.assertEqual(config["metrics_out"], "results/metrics.csv")
 
 
 if __name__ == "__main__":
