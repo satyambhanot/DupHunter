@@ -229,13 +229,20 @@ def run_son(
         Dictionary containing recorded run times (`son_time_sec`, `fpgrowth_time_sec`).
     """
     path = Path(input_path)
-    if path.suffix.lower() == ".parquet" or (path.is_dir() and any(path.glob("*.parquet"))):
+    is_uri = "://" in input_path and not input_path.lower().endswith((".txt", ".csv"))
+    if (
+        is_uri
+        or path.suffix.lower() == ".parquet"
+        or (path.is_dir() and any(path.glob("*.parquet")))
+    ):
         try:
             df = spark.read.parquet(input_path)
             tag_col = "tags" if "tags" in df.columns else df.columns[0]
             rdd = df.select(tag_col).rdd.map(
                 lambda row: (
-                    list(row[0]) if isinstance(row[0], (list, tuple)) else str(row[0]).split()
+                    []
+                    if row[0] is None
+                    else (list(row[0]) if isinstance(row[0], (list, tuple)) else str(row[0]).split())
                 )
             )
         except Py4JJavaError:
