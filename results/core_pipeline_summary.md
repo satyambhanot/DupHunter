@@ -43,10 +43,10 @@ The final clean pipeline execution completed under application ID `app-202611192
   - **Laptop B (`192.168.50.11`):** 206 tasks, 40.97 GB shuffle write
 
 ### Full Pipeline Run History (100% Stages)
-Prior stages generated shingles, 128-hash MinHash signatures, and default setting candidates:
-1. **`app-20261118233111-0000`:** Shingle extraction & MinHash signatures (100% data). Duration: 1,064.90 s (17.75 min), 944 tasks, 18.13 GB shuffle write.
-2. **`app-20261118235310-0001`:** Candidate extraction & baseline evaluation for default setting ($b=16, r=8$). Duration: 8,450.32 s (140.84 min), 1,797 tasks, 292.50 GB shuffle write.
-3. **`app-20261119203003-0000`:** Final chosen setting ($b=32, r=4$) candidate generation and evaluation. Duration: 3,571.39 s (59.52 min), 880 tasks, 105.58 GB shuffle write.
+Prior stages generated shingles, 128-hash MinHash signatures, and default setting candidates (all stages used `configs/full_run.json`: word 1-grams of `title`, MinHash $n=128$, `seed=42`):
+1. **`app-20261118233111-0000`:** Shingle extraction & MinHash signatures (100% data). Git commit: `7614a4f` (on `dev`). Duration: 1,064.90 s (17.75 min), 944 tasks, 18.13 GB shuffle write.
+2. **`app-20261118235310-0001`:** Candidate extraction & baseline evaluation for default setting ($b=16, r=8$). Git commit: `7614a4f`. Duration: 8,450.32 s (140.84 min), 1,797 tasks, 292.50 GB shuffle write.
+3. **`app-20261119203003-0000`:** Final chosen setting ($b=32, r=4$) candidate generation and evaluation. Git commit: `7614a4f`. Duration: 3,571.39 s (59.52 min), 880 tasks, 105.58 GB shuffle write.
 
 ---
 
@@ -56,7 +56,7 @@ All required intermediate and final datasets are verified present in HDFS (`hdfs
 
 | Dataset | Sample Fraction | Configuration | HDFS Path | Status |
 |---|---|---|---|---|
-| Shingles (C2) | 100% | 3-gram words (`title + body`) | `/data/core_pipeline/stackoverflow/100pct/shingles` | Complete |
+| Shingles (C2) | 100% | word 1-grams (`title`) | `/data/core_pipeline/stackoverflow/100pct/shingles` | Complete |
 | Signatures (C3) | 100% | MinHash $n=128$, `seed=42` | `/data/core_pipeline/stackoverflow/100pct/signatures` | Complete |
 | Candidates (C4) | 100% | Chosen ($b=32, r=4$) | `/data/core_pipeline/stackoverflow/100pct/candidates/chosen` | Complete |
 | Candidates (C4) | 100% | Default ($b=16, r=8$) | `/data/core_pipeline/stackoverflow/100pct/candidates/default` | Complete |
@@ -95,7 +95,10 @@ The metrics were computed by `src.evaluation.evaluate` using the official Stack 
    - The chosen setting produced $740,022,352$ candidates, achieving a **Reduction Ratio of 0.999695** (99.97% of all non-duplicate pairs pruned).
    - The default setting produced $11,725,463$ candidates with a reduction ratio of 0.999995 (99.9995% pruned).
 
-3. **Cluster Resource Efficiency:**
+3. **Scale Effect of `size_limit(1000)` on Recall:**
+   - Recall@10 at 100% (0.0378) is notably lower than at 10% (0.0637), and the chosen candidate count grows only ~27× for 10× data while the default setting grows ~97×. This is consistent with the `size_limit(1000)` bucket policy dropping large buckets more aggressively at full scale, causing some true duplicate pairs in high-collision buckets to be lost. Experiment E7 (#30) is designed to quantify this effect precisely.
+
+4. **Cluster Resource Efficiency:**
    - Peak execution memory per task remained under $1.0\text{ GB}$ ($976\text{ MB}$), well within the allocated `--conf spark.executor.memory=4g` headroom.
    - Stage 9 (Parquet candidate write) was the most computationally intensive stage, taking $1,328.94\text{ s}$ across 200 tasks.
    - Work distribution between Laptop A (8 cores) and Laptop B (4 cores) scaled with core capacity (674 tasks on Laptop A, 206 tasks on Laptop B), validating cluster load balancing across the Gigabit link.
