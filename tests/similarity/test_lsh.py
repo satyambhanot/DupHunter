@@ -361,6 +361,16 @@ def test_cli_help():
     assert args.groups == "groups.parquet"
 
 
+@pytest.mark.parametrize("argv", [[], ["--input", "in.parquet"], ["--output", "out.parquet"]])
+def test_cli_without_input_and_output_is_an_error(argv, capsys):
+    from src.similarity.lsh import main
+
+    with pytest.raises(SystemExit) as raised:
+        main(argv)
+    assert raised.value.code == 2
+    assert "required" in capsys.readouterr().err
+
+
 def test_resolve_bucket_policy_names_and_module_attr():
     from src.similarity.lsh import pass_through_policy, resolve_bucket_policy
 

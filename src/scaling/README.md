@@ -30,9 +30,20 @@ scripts/run_scaling.sh --test A --master spark://<laptop-b-ip>:7077             
 scripts/run_scaling.sh --test B --cores 4+4 --runs 1 --master spark://<laptop-a-ip>:7077
 ```
 
-The application (default `scripts/cluster/core_job.py`, written by WS4 in #31) must accept `--fraction`, the
-share of the data to use. Every run is a fresh Spark application named `e8_<test>_<cores>_<fraction>_run<k>`,
-with its event log written to `hdfs:///spark-logs` (`--event-log-dir` changes it).
+The application is `scripts/cluster/stages.py`, the core pipeline of #31. It must accept `--fraction`
+(the share of the data to use), `--master`, `--output-root` and `--metrics-out`. Every run is a fresh
+Spark application named `e8_<test>_<cores>_<fraction>_run<k>`, with its event log written to
+`hdfs:///spark-logs` (`--event-log-dir` changes it). The runner also:
+
+- ships a fresh zip of `src` with `--py-files` (executors import `src.*` inside Spark tasks; give your own
+  with `--py-files`);
+- passes `--master` to the application, which builds its own session and would otherwise use `local[*]`;
+- writes each run under `hdfs:///data/e8_scaling/<run name>` and its metrics under
+  `results/e8_scaling/run_metrics/`, so a scaling run never overwrites the core pipeline outputs or
+  adds rows to `results/metrics.csv`;
+- runs only the `chosen` LSH setting (`--setting` changes it, an empty value runs all of them).
+
+Extra arguments for the application go in as `--app-arg=--done --app-arg=evaluate`.
 
 ## After the runs
 

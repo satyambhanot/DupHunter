@@ -96,3 +96,10 @@ def test_a_ucid_in_a_text_file_is_found(tmp_path):
     pdf = tmp_path / "slides.pdf"
     pdf.write_bytes(fake_id.encode())
     assert find_ucids([notes, clean, pdf], tmp_path) == ["notes.md"]
+
+
+def test_setuptools_is_required_for_pyspark_on_new_python():
+    """pyspark 3.5 imports distutils, which Python 3.12 removed; setuptools brings it back."""
+    lines = (ROOT / "requirements.txt").read_text().splitlines()
+    assert any(line.startswith("pyspark==3.5") for line in lines)
+    assert any(line.startswith("setuptools") and "python_version" in line for line in lines)

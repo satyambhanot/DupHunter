@@ -4,3 +4,4 @@ pyarrow>=17,<27
 pandas>=2.2,<4
 numpy>=1.26,<3
 matplotlib>=3.8,<4
+setuptools>=68; python_version >= "3.12"  # pyspark 3.5 imports distutils, which Python 3.12 removed
