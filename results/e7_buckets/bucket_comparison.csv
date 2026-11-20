@@ -1,0 +1,3 @@
+strategy,bucket_limit,drop_common_share,time_sec,slowest_task_sec,median_task_sec,shuffle_bytes,memory_bytes,n_candidates,recall@10,lost_answer_pairs,total_answer_pairs,lost_answer_share
+size_limit,1000,,3033.7883,148.3900,6.2625,141178770419,746585824,740022352,0.037762,94343,102878,0.917038
+drop_common_shingles,,0.05,2261.4612,403.4950,1.5530,151131925069,805371712,578143060,0.047498,93686,102878,0.910651
