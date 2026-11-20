@@ -103,3 +103,37 @@ def test_spark_wrapper_returns_c3_rows(spark):
     assert rows[0].__fields__ == ["post_id", "signature"]
     assert all(len(row.signature) == 8 for row in rows)
     assert all(value == EMPTY_SIGNATURE_VALUE for value in rows[1].signature)
+
+
+def _write_c2(spark, path) -> None:
+    spark.createDataFrame(
+        [(1, [5, 9, 11, 40]), (2, [5, 9, 12]), (3, [])], "post_id long, shingles array<long>"
+    ).write.parquet(str(path))
+
+
+def test_command_line_writes_the_same_signatures_as_python(spark, tmp_path):
+    from src.similarity.minhash import main
+
+    _write_c2(spark, tmp_path / "c2")
+    argv = ["--shingles", str(tmp_path / "c2"), "--out", str(tmp_path / "c3")]
+    assert main([*argv, "--n", "16", "--seed", "7"]) == 0
+    rows = {r.post_id: r.signature for r in spark.read.parquet(str(tmp_path / "c3")).collect()}
+    assert rows[1] == compute_signature([5, 9, 11, 40], 16, 7).tolist()
+    assert rows[3] == [2_147_483_647] * 16  # the documented empty-set value
+    assert set(spark.read.parquet(str(tmp_path / "c3")).columns) == {"post_id", "signature"}
+
+
+def test_command_line_adds_created_when_asked(spark, tmp_path):
+    from datetime import datetime
+
+    from src.similarity.minhash import main
+
+    _write_c2(spark, tmp_path / "c2")
+    spark.createDataFrame(
+        [(1, datetime(2020, 1, 1)), (2, datetime(2021, 1, 1))],
+        "post_id long, created timestamp",
+    ).write.parquet(str(tmp_path / "meta"))
+    argv = ["--shingles", str(tmp_path / "c2"), "--out", str(tmp_path / "c3")]
+    assert main([*argv, "--created-from", str(tmp_path / "meta")]) == 0
+    out = {r.post_id: r.created for r in spark.read.parquet(str(tmp_path / "c3")).collect()}
+    assert out[2] == datetime(2021, 1, 1) and out[3] is None  # no metadata gives a null, not a drop
