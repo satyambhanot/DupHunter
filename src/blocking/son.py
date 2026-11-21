@@ -242,7 +242,11 @@ def run_son(
                 lambda row: (
                     []
                     if row[0] is None
-                    else (list(row[0]) if isinstance(row[0], (list, tuple)) else str(row[0]).split())
+                    else (
+                        list(row[0])
+                        if isinstance(row[0], (list, tuple))
+                        else str(row[0]).split()
+                    )
                 )
             )
         except Py4JJavaError:
