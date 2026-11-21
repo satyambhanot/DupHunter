@@ -22,7 +22,6 @@ A shared \texttt{Ranker} protocol (\texttt{src/verification/rankers.py}) support
 \texttt{TfidfRanker} (\texttt{src/verification/rerank.py}) computes unit-normalized TF-IDF
 cosine similarity \cite{salton1988tfidf} over the top-$k$ verified candidates per query to resolve
 lexical ties using rare-term weights.
-% TODO(#40): reword if TF-IDF re-ranking is cut at the checkpoint.
 
 \subsection{Big-Bucket Skew Mitigation (E7)}
 Popular or boilerplate title shingles can push many questions into a single LSH bucket, turning a
@@ -36,10 +35,9 @@ total implied pairs, and largest-bucket pair share) and compares three policies 
   \item \textbf{Drop common shingles (\texttt{drop\_common\_shingles}):} prune shingles whose
         document frequency exceeds \texttt{drop\_common\_share} in \texttt{ShingleConfig}.
 \end{enumerate}
-As a stretch alternative (\#41), \texttt{salt\_split} (\texttt{src/verification/salt\_split.py})
-partitions oversized buckets into $k$ chunks and emits chunk-pair sub-buckets so all candidate pairs
-are preserved while work spreads across tasks.
-% TODO(#41): drop this paragraph if salt_split is cut at the checkpoint.
+As a stretch alternative (\#41), \texttt{salt\_split} was planned to partition oversized buckets
+into $k$ chunks and emit chunk-pair sub-buckets so all candidate pairs are preserved while work
+spreads across tasks, but it was cut at the checkpoint to prioritize core E6 and E7 cluster runs.
 
 \subsection{Frequent-Tagset Blocking with SON (E6)}
 To study whether topic partitioning reduces LSH work (Q4), we implement the two-pass Savasere,
@@ -83,9 +81,57 @@ For E6 SON mining on Super User ($516{,}669$ questions),
 two-pass SON finds $52$ frequent tagsets in $77.4713$\,s versus $34.5360$\,s for MLlib
 \texttt{FPGrowth}
 % source: results/e6_blocking/frequent_tagsets.csv
-while matching its frequent itemsets exactly.
-% TODO(#17): insert full Python-subset E6 comparison table (time, shuffle, n_candidates, recall@10, map, recall_cost).
-% TODO(#30): insert full Python-subset E7 bucket profile and size_limit vs. drop_common_shingles comparison table.
+while matching its frequent itemsets exactly. On the full Stack Overflow \texttt{python} subset
+($2{,}204{,}200$ questions, $102{,}878$ answer-key pairs, $n=128$, $b=32$, $r=4$), SON mining at
+support $0.005$ (\texttt{max\_size=3}) discovers $141$ frequent tagsets in $64.6821$\,s versus
+$9.8758$\,s for \texttt{FPGrowth} and assigns all questions across $72$ groups ($0.00\%$ in
+\texttt{other}, $33.01\%$ in \texttt{python}).
+% source: results/e6_blocking/frequent_tagsets_stackoverflow.csv, results/e6_blocking/README.md
+Table~\ref{tab:e6-blocking} compares blocking modes: \texttt{single\_tag} (most frequent tag
+other than \texttt{python}) cuts candidates by $68.4\%$ and runtime by $22.9\%$ at a
+\texttt{recall\_cost} of $0.620891$, while \texttt{son} cuts candidates by $60.0\%$ at
+\texttt{recall\_cost} $0.544072$.
+
+\begin{table}[h]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \caption{E6 tag-blocking comparison on $2{,}204{,}200$ Stack Overflow \texttt{python} questions ($n=128$, $b=32$, $r=4$).}
+  \label{tab:e6-blocking}
+  \begin{tabular}{@{}lrrrrrr@{}}
+    \toprule
+    Mode & Time (s) & Shuffle (GB) & Candidates & Recall@10 & MAP & Recall cost \\
+    \midrule
+    \texttt{none} & $3126.98$ & $174.44$ & $740{,}022{,}352$ & $0.037762$ & $0.023023$ & $0.000000$ \\ % source: results/e6_blocking/blocking_comparison.csv
+    \texttt{single\_tag} & $2412.46$ & $165.14$ & $233{,}502{,}916$ & $0.023807$ & $0.015507$ & $0.620891$ \\ % source: results/e6_blocking/blocking_comparison.csv
+    \texttt{son} & $2880.62$ & $168.62$ & $296{,}065{,}255$ & $0.027072$ & $0.017176$ & $0.544072$ \\ % source: results/e6_blocking/blocking_comparison.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+For E7 on the full Stack Overflow \texttt{python} subset (Table~\ref{tab:e7-buckets}),
+\texttt{drop\_common\_shingles} (\texttt{drop\_common\_share=0.05}) is $25.5\%$ faster overall
+($2261.46$\,s vs. $3033.79$\,s), cuts candidate pairs by $21.9\%$ ($578{,}143{,}060$ vs.
+$740{,}022{,}352$), and raises Recall@10 by $+25.8\%$ ($0.047498$ vs. $0.037762$), whereas
+\texttt{size\_limit} ($1000$) bounds worst-case task skew ($148.39$\,s slowest task vs.
+$403.50$\,s).
+% source: results/e7_buckets/bucket_comparison.csv, results/e7_buckets/README.md
+
+\begin{table}[h]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \caption{E7 big-bucket strategy comparison on $2{,}204{,}200$ Stack Overflow \texttt{python} questions.}
+  \label{tab:e7-buckets}
+  \begin{tabular}{@{}lrrrrrr@{}}
+    \toprule
+    Strategy & Time (s) & Slowest (s) & Median (s) & Shuffle (GB) & Candidates & Recall@10 \\
+    \midrule
+    \texttt{size\_limit(1000)} & $3033.79$ & $148.39$ & $6.26$ & $141.18$ & $740{,}022{,}352$ & $0.037762$ \\ % source: results/e7_buckets/bucket_comparison.csv
+    \texttt{drop\_common\_shingles(0.05)} & $2261.46$ & $403.50$ & $1.55$ & $151.13$ & $578{,}143{,}060$ & $0.047498$ \\ % source: results/e7_buckets/bucket_comparison.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
 }
 
 \newcommand{\wsthreeAnalysis}{%
@@ -97,8 +143,10 @@ variance cheaply after LSH has already pruned the quadratic search space.
 \paragraph{Big-bucket skew and checkpoint cuts.} Skewed buckets degrade Spark stage tail latency
 and executor memory. \texttt{size\_limit} bounds worst-case bucket work at the cost of dropping
 oversized buckets, whereas \texttt{drop\_common\_shingles} prevents common tokens from forming huge
-buckets earlier in Stage C1 $\to$ C2.
-% TODO(#30,#41): state final scaling-run bucket strategy and whether E7 salt_split / E4 TF-IDF stretch runs were cut at the checkpoint.
+buckets earlier in Stage C1 $\to$ C2. For E8 scaling runs, \texttt{drop\_common\_shingles} is the
+primary recall-preserving strategy, paired with \texttt{size\_limit} as a tail-skew guard. At the
+checkpoint, streaming, AI-impact experiments, and E7 \texttt{salt\_split} (\#41) were cut so
+cluster budget focused on core E6 and E7 runs, while E4 TF-IDF re-ranking (\#40) was completed.
 
 \paragraph{Tag blocking trade-off.} Blocking by frequent tagsets shrinks candidate comparisons
 within topics, but any duplicate pair whose questions do not share the same assigned group incurs
@@ -108,10 +156,9 @@ within topics, but any duplicate pair whose questions do not share the same assi
 \newcommand{\wsthreeContribution}{%
 \paragraph{Navjot Singh Shienh (WS3: Candidate Refinement, Blocking, and Report Assembly).}
 Implemented exact Jaccard verification (\texttt{verify.py}, \texttt{rankers.py}, E4) and TF-IDF
-cosine re-ranking (\texttt{rerank.py}); two-pass Spark RDD SON mining and tag-blocking assignment
-(\texttt{son.py}, \texttt{blocking.py}, E6); big-bucket profiling, \texttt{size\_limit}
-comparison, and \texttt{salt\_split} (\texttt{buckets.py}, \texttt{salt\_split.py}, E7); Laptop~B
-Spark cluster integration; and the LaTeX report assembly and validation tooling (\texttt{main.tex},
-\texttt{refs.bib}, \texttt{check\_report.py}).
-% TODO(#40,#41): remove rerank.py and salt_split.py from this list if either is cut at the checkpoint.
+cosine re-ranking (\texttt{rerank.py}, \#40); two-pass Spark RDD SON mining and tag-blocking
+assignment (\texttt{son.py}, \texttt{blocking.py}, E6); big-bucket profiling and
+\texttt{size\_limit} vs. \texttt{drop\_common\_shingles} comparison (\texttt{buckets.py}, E7);
+Laptop~B Spark cluster integration; and the LaTeX report assembly and validation tooling
+(\texttt{main.tex}, \texttt{refs.bib}, \texttt{check\_report.py}).
 }
