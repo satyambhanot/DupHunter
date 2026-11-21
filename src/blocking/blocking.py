@@ -241,6 +241,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--signatures", help="MinHash signatures Parquet (C3) for LSH comparison")
     parser.add_argument("--answer-key", help="Answer key Parquet (C6) for evaluation")
     parser.add_argument("--mode", choices=sorted(STRATEGIES), default="son")
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=sorted(STRATEGIES),
+        default=None,
+        help="Modes to run with --output (default: none single_tag son)",
+    )
     parser.add_argument("--groups-out", help="Write Contract C9 (post_id, group) Parquet here")
     parser.add_argument("--output", help="Write E6 comparison CSV here (runs all modes)")
     parser.add_argument(
@@ -280,6 +287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 posts_tags,
                 ak,
                 tagsets,
+                modes=tuple(args.modes) if args.modes else ("none", "single_tag", "son"),
                 lsh_config=LSHConfig(b=args.bands, r=args.rows, n=args.bands * args.rows),
                 exclude_tags=exclude_tags,
             )
