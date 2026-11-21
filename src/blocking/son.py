@@ -243,9 +243,7 @@ def run_son(
                     []
                     if row[0] is None
                     else (
-                        list(row[0])
-                        if isinstance(row[0], (list, tuple))
-                        else str(row[0]).split()
+                        list(row[0]) if isinstance(row[0], (list, tuple)) else str(row[0]).split()
                     )
                 )
             )
