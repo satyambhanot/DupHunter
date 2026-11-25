@@ -1,0 +1,3 @@
+strategy,bucket_limit,drop_common_share,num_buckets,total_items,min_size,max_size,mean_size,median_size,p95_size,p99_size,total_pairs,largest_bucket_pairs,largest_bucket_share,buckets_over_limit,over_limit_pairs,over_limit_share
+none,1000,,46377062,70534400,1,75810,1.5208897881457002,1.0,3.0,9.0,8169806898,2873540145,0.3517268132375875,659,7345993920,0.899164
+drop_common_shingles,1000,0.05,54004111,70534400,1,8286,1.3060931602040444,1.0,2.0,6.0,701351002,34324755,0.048940908193070495,139,350168932,0.499278
