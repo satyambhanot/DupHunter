@@ -5,7 +5,9 @@ Test B: one laptop alone (``A:8`` or ``B:8``), then both laptops: ``4+4`` and ``
 Test C: 10%, 25%, 50% and 100% of the python subset on both laptops (``8+8``).
 
 Which laptop runs a single-laptop setting is decided by the master URL: use the master of a cluster
-that has only that laptop's worker. The application must accept ``--fraction`` (share of the data).
+that has only that laptop's worker. The application must accept ``--fraction`` (share of the
+data), ``--master``, ``--app-name``, ``--output-root`` and ``--metrics-out``;
+``scripts/cluster/stages.py`` does, and it also takes ``--setting``.
 """
 
 import re
@@ -13,7 +15,12 @@ from collections.abc import Sequence
 
 TESTS = ("A", "B", "C")
 DEFAULT_EVENT_LOG_DIR = "hdfs:///spark-logs"
-DEFAULT_APP = "scripts/cluster/core_job.py"
+DEFAULT_APP = "scripts/cluster/stages.py"
+# Each run writes under its own directory, so it never overwrites the core pipeline outputs.
+DEFAULT_OUTPUT_ROOT = "hdfs:///data/e8_scaling"
+# Metrics of a scaling run are not core results, so they stay out of results/metrics.csv.
+DEFAULT_METRICS_DIR = "results/e8_scaling/run_metrics"
+DEFAULT_SETTING = "chosen"
 RUNS_PER_SETTING = 3
 
 # The settings of each test, as (cores, fraction) pairs.
@@ -70,16 +77,23 @@ def build_command(
     app: str = DEFAULT_APP,
     app_args: Sequence[str] = (),
     event_log_dir: str = DEFAULT_EVENT_LOG_DIR,
+    py_files: str | None = None,
+    output_root: str = DEFAULT_OUTPUT_ROOT,
+    setting: str | None = DEFAULT_SETTING,
 ) -> list[str]:
     """Build one ``spark-submit`` command; nothing is executed.
 
     Each run is a fresh application, so Spark is restarted between runs and caching cannot
     help later ones. The event log goes to ``event_log_dir`` and is parsed by
-    ``scripts/parse_eventlogs.py``.
+    ``scripts/parse_eventlogs.py``. ``py_files`` (a zip of ``src``) is shipped to the executors,
+    which import ``src.*`` inside Spark tasks. The master is passed on to the application too:
+    ``stages.py`` builds its own session, and without it a run would silently use ``local[*]``.
+    The run name is passed on too, because the application's ``appName`` replaces
+    ``spark-submit --name`` and ``parse_eventlogs.py`` identifies runs by that name.
     """
     executor_cores, total_cores = parse_cores(cores)
     name = log_name(test, cores, fraction, run)
-    return [
+    command = [
         "spark-submit",
         "--master", master,
         "--name", name,
@@ -87,7 +101,17 @@ def build_command(
         "--total-executor-cores", str(total_cores),
         "--conf", "spark.eventLog.enabled=true",
         "--conf", f"spark.eventLog.dir={event_log_dir}",
+    ]  # fmt: skip
+    if py_files:
+        command += ["--py-files", py_files]
+    command += [
         app,
         "--fraction", format_fraction(fraction),
-        *app_args,
+        "--master", master,
+        "--app-name", name,
+        "--output-root", f"{output_root.rstrip('/')}/{name}",
+        "--metrics-out", f"{DEFAULT_METRICS_DIR}/{name}.csv",
     ]  # fmt: skip
+    if setting:
+        command += ["--setting", setting]
+    return [*command, *app_args]

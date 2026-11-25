@@ -7,10 +7,15 @@ cluster (issue #32).
 
 import argparse
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 from src.scaling import commands
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def commands_for(args: argparse.Namespace) -> list[list[str]]:
@@ -23,7 +28,17 @@ def commands_for(args: argparse.Namespace) -> list[list[str]]:
             settings = [(cores, args.fraction) for cores, _ in settings]
     return [
         commands.build_command(
-            args.test, cores, fraction, run, args.master, args.app, args.app_arg, args.event_log_dir
+            args.test,
+            cores,
+            fraction,
+            run,
+            args.master,
+            args.app,
+            args.app_arg,
+            args.event_log_dir,
+            args.py_files,
+            args.output_root,
+            args.setting or None,
         )
         for cores, fraction in settings
         for run in range(1, args.runs + 1)
@@ -42,7 +57,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--master", default="spark://localhost:7077", help="Spark master URL")
     parser.add_argument(
-        "--app", default=commands.DEFAULT_APP, help="application that accepts --fraction"
+        "--app",
+        default=commands.DEFAULT_APP,
+        help="application: takes --fraction, --master, --app-name, --output-root, --metrics-out",
+    )
+    parser.add_argument(
+        "--py-files",
+        help="zip of src shipped to the executors (default: a fresh zip of this checkout)",
+    )
+    parser.add_argument(
+        "--output-root",
+        default=commands.DEFAULT_OUTPUT_ROOT,
+        help="each run writes under <output-root>/<run name>",
+    )
+    parser.add_argument(
+        "--setting",
+        default=commands.DEFAULT_SETTING,
+        help="LSH setting of the config to run; empty runs every setting",
     )
     parser.add_argument(
         "--app-arg", action="append", default=[], help="extra argument for the application"
@@ -57,10 +88,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.runs < 1:
         raise SystemExit("--runs must be at least 1")
-    for command in commands_for(args):
-        print(shlex.join(command))
-        if not args.dry_run:
-            subprocess.run(command, check=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        if not args.py_files:
+            archive = shutil.make_archive(str(Path(tmp) / "src"), "zip", ROOT, "src")
+            args.py_files = archive
+        for command in commands_for(args):
+            print(shlex.join(command))
+            if not args.dry_run:
+                subprocess.run(command, check=True)
     return 0
 
 
