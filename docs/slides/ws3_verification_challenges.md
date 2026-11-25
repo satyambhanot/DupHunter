@@ -22,7 +22,11 @@
   - `size_limit(L)`: drops buckets larger than $L$ after banding.
   - `drop_common_shingles`: prunes high-DF shingles upstream in `ShingleConfig`.
   - Stretch (`#41`, `salt_split`): splits oversized buckets into $k$ chunks and emits chunk-pair sub-buckets so all pairs remain while work spreads across tasks.
-- **Full-Scale Comparison:** `results/e7_buckets/` (pending `#31` full Python-subset cluster run; stretch `#41` subject to checkpoint cut if time is constrained).
+- **Full-Scale E7 (`#30`, 2.2M Python questions):**
+  - `size_limit(1000)`: `3033.79 s`, slowest `148.39 s` vs. median `6.26 s`, `740.0M` candidates, `Recall@10 = 0.0378`
+  - `drop_common_shingles(0.05)`: `2261.46 s` (**-25.5%**), slowest `403.50 s` vs. median `1.55 s`, `578.1M` candidates, `Recall@10 = 0.0475` (**+25.8%**)
+  - **Caveats:** `drop_common_shingles` ran without a size limit and changes the shingle sets; no unlimited run.
+  - **Scaling runs use:** `size_limit(1000)` alone (the combination with dropping common shingles was not run).
 
 ---
 
@@ -30,16 +34,16 @@
 - **Two-Pass SON (`son.py`, Spark RDD):**
   - Pass 1: Apriori per partition at scaled support $s \cdot |P_i|$.
   - Pass 2: Exact global support count across all baskets.
-- **Super User E6 Run (516,669 questions):**
-  - Discovered `52` frequent tagsets matching MLlib `FPGrowth` (`77.47 s` custom SON vs. `34.54 s` library `FPGrowth`).
-- **Tag Blocking (`blocking.py`, Contract C9):**
-  - Assigns each question to its largest frequent tagset (ties: lowest support), else `other`; compared against `single_tag` and `none` via `lsh.py --groups` and `recall_cost`.
+- **Mining Runtime:** Super User (`516,669` questions, `52` sets): `77.47 s` SON vs. `34.54 s` `FPGrowth`; Stack Overflow Python (`2.2M` questions, `--support 0.005`, `143` sets): `64.68 s` SON vs. `9.88 s` `FPGrowth`.
+- **Full-Scale E6 (`#17`, Stack Overflow Python):**
+  - `none`: `3126.98 s`, `740.0M` candidates, `Recall@10 = 0.0378`, `recall_cost = 0.0`
+  - `single_tag` (excl. `python`): `2412.46 s` (-22.9%), `233.5M` candidates (-68.4%), `Recall@10 = 0.0238`, `recall_cost = 0.6209`
+  - `son` (`72` groups, `0%` `other`): `2880.62 s` (-7.9%), `296.1M` candidates (-60.0%), `Recall@10 = 0.0271`, `recall_cost = 0.5441`
 
 ---
 
 ### Slide 12: Challenges & Scope Decisions
 - **Spark Windows / Cluster Interop:** Resolved Java 17 / `PYSPARK_PYTHON` / cross-machine networking constraints for the 2-laptop cluster.
-- **Skew vs. Recall Trade-off:** Dropping oversized buckets protects tail latency but risks losing true duplicates; upstream common-shingle pruning avoids generating giant buckets altogether.
+- **Skew vs. Recall Trade-off:** Dropping oversized buckets protects tail latency but loses duplicates; `drop_common_shingles` avoids huge buckets while preserving recall.
 - **Scope & Checkpoint Cuts:**
-  - Streaming & AI-impact experiments were dropped in the earlier scope adjustment to focus on core batch scaling and accuracy.
-  - Stretch items (`#40` TF-IDF re-ranking code complete; `#41` `salt_split` code complete) are prioritized behind core E6/E7 full-scale cluster runs (`#17`, `#30`).
+  - Streaming, AI-impact experiments, and the full-scale `salt_split` run (`#41`; code done and tested) were cut to prioritize core E6/E7 cluster runs (`#17`, `#30`); E4 TF-IDF re-ranking (`#40`) was completed.
