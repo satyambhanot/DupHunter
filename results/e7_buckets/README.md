@@ -27,8 +27,32 @@ spark-submit \
 
 `drop_common_shingles(0.05)` is **25.5% faster** overall, cuts candidate pairs by **21.9%** (`578.1M` vs. `740.0M`), and achieves **+25.8% higher Recall@10** (`0.047498` vs. `0.037762`), though `size_limit(1000)` bounds tail task skew (`148.39 s` slowest task vs. `403.50 s`). A possible next step is to drop common shingles (`drop_common_share=0.05`) and keep `size_limit(1000)` as a tail-skew guard. That combination has **not** been run, and the core and scaling runs use `size_limit(1000)` alone.
 
+## Bucket-Size Profile (`none` vs. `drop_common_shingles(0.05)`)
+
+Generated via `profile_lsh_strategies` (`results/e7_buckets/bucket_profile.csv`) on all `2,204,200` Stack Overflow Python questions (`n=128`, `b=32`, `r=4`, `70,534,400` band entries, `--bucket-limit 1000`):
+
+| Strategy | Buckets | Buckets > 1,000 | Max Size | Median / p95 / p99 | Total Implied Pairs | Largest Bucket Share | Over-Limit Pair Share |
+|---|---:|---:|---:|---|---:|---:|---:|
+| `none` | 46,377,062 | 659 | 75,810 | 1.0 / 3.0 / 9.0 | 8,169,806,898 | 35.17% | 89.92% |
+| `drop_common_shingles(0.05)` | 54,004,111 | 139 | 8,286 | 1.0 / 2.0 / 6.0 | 701,351,002 | 4.89% | 49.93% |
+
+Without a bucket limit (`none`), just **659** buckets (`0.0014%` of buckets) account for **89.92%** (`7.35B` of `8.17B`) of all implied candidate pairs, and the single largest bucket (`75,810` items) accounts for **35.17%** (`2.87B` pairs). Pruning the top 5% most common shingles (`drop_common_shingles(0.05)`) shrinks `max_size` by **9.1×** (`75,810` → `8,286`) and total implied pairs by **11.6×** (`8.17B` → `701.4M`).
+
+```bash
+spark-submit \
+  --master spark://127.0.0.1:7077 \
+  --name duphunter-e7-bucket-profile \
+  --py-files /tmp/src.zip \
+  src/verification/buckets.py \
+  --master spark://127.0.0.1:7077 \
+  --posts file:///home/navjot/so-data/posts_text \
+  --strategies none drop_common_shingles \
+  --profile-only \
+  --profile-out results/e7_buckets/bucket_profile.csv
+```
+
 ## Limits of this comparison
 
-- **No run without a bucket limit.** `lost_answer_pairs` counts every answer-key pair that is missing from the candidates, including pairs that never shared a bucket. It does not show how many pairs `size_limit(1000)` itself removes. That needs a `none` run or a bucket-size profile, and neither was produced at full scale.
+- **No candidate-pair run without a bucket limit.** `lost_answer_pairs` counts every answer-key pair missing from candidates (including pairs never co-bucketed); `bucket_profile.csv` above quantifies the raw oversized-bucket skew without a limit (`89.92%` of implied pairs in `659` buckets > 1,000).
 - **The two rows differ in more than the bucket policy.** The `drop_common_shingles` run has no bucket size limit (it uses the pass-through policy), and dropping common shingles also changes the shingle sets. Part of its higher Recall@10 can come from the different representation.
-- **Attribution of the task metrics.** Both strategies ran in one Spark application. How `slowest_task_sec`, `median_task_sec`, `shuffle_bytes` and `memory_bytes` were split between them in the event log is not recorded here, so these four columns cannot be reproduced from this page alone.
+- **Attribution of the task metrics.** Both strategies ran sequentially in one Spark application (`/spark-logs/app-20261119235437-0000`). In the event log, the stages were partitioned chronologically into two disjoint ranges: the LSH + evaluation stages of `size_limit(1000)` vs. the LSH + evaluation stages of `drop_common_shingles(0.05)` (plus its shingle/MinHash rebuild). Within each range, `slowest_task_sec` and `median_task_sec` were taken over all tasks in that range, `shuffle_bytes` was summed across its `Shuffle Write Metrics` / `Shuffle Read Metrics`, and `memory_bytes` is the max `Peak Execution Memory` observed in that range.
