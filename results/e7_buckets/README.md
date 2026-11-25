@@ -25,4 +25,10 @@ spark-submit \
 
 ## Conclusion & Scaling-Run Strategy
 
-`drop_common_shingles(0.05)` is **25.5% faster** overall, cuts candidate pairs by **21.9%** (`578.1M` vs. `740.0M`), and achieves **+25.8% higher Recall@10** (`0.047498` vs. `0.037762`), though `size_limit(1000)` bounds tail task skew (`148.39 s` slowest task vs. `403.50 s`). For scaling runs, **drop common shingles (`drop_common_share=0.05`)** is the primary recall-preserving strategy, paired with `size_limit(1000)` as a tail-skew guard.
+`drop_common_shingles(0.05)` is **25.5% faster** overall, cuts candidate pairs by **21.9%** (`578.1M` vs. `740.0M`), and achieves **+25.8% higher Recall@10** (`0.047498` vs. `0.037762`), though `size_limit(1000)` bounds tail task skew (`148.39 s` slowest task vs. `403.50 s`). A possible next step is to drop common shingles (`drop_common_share=0.05`) and keep `size_limit(1000)` as a tail-skew guard. That combination has **not** been run, and the core and scaling runs use `size_limit(1000)` alone.
+
+## Limits of this comparison
+
+- **No run without a bucket limit.** `lost_answer_pairs` counts every answer-key pair that is missing from the candidates, including pairs that never shared a bucket. It does not show how many pairs `size_limit(1000)` itself removes. That needs a `none` run or a bucket-size profile, and neither was produced at full scale.
+- **The two rows differ in more than the bucket policy.** The `drop_common_shingles` run has no bucket size limit (it uses the pass-through policy), and dropping common shingles also changes the shingle sets. Part of its higher Recall@10 can come from the different representation.
+- **Attribution of the task metrics.** Both strategies ran in one Spark application. How `slowest_task_sec`, `median_task_sec`, `shuffle_bytes` and `memory_bytes` were split between them in the event log is not recorded here, so these four columns cannot be reproduced from this page alone.
