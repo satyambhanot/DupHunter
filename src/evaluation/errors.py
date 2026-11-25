@@ -31,7 +31,7 @@ def lsh_probability(s: float, b: int, r: int) -> float:
 
 
 HINTS = {
-    "exact_jaccard": "run evaluate.py with --exact (the exact Jaccard of the pairs)",
+    "exact_jaccard": "run evaluate.py with --shingles or --exact (the exact Jaccard of the pairs)",
     "tags": "run evaluate.py with --posts-text",
     "body_len": "run evaluate.py with --posts-text",
 }

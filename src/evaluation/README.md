@@ -48,7 +48,6 @@ It writes `recall_by_similarity`, `recall_by_tags` (top 20 tags, a pair counts o
 eye. Every bin shows its pair count; bins with fewer than 20 pairs are flagged `low_n` (grey bars). With
 `--bands` and `--rows` the similarity plot also draws the LSH theory `1 - (1 - s^r)^b`: misses at low
 similarity are expected, misses at high similarity are not. Needs pandas, pyarrow and matplotlib.
-||||||| 558e3d9
 
 ## The per-pair table of the full run (for the error analysis, #33)
 
