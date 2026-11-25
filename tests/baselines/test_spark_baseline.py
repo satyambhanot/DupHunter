@@ -63,3 +63,43 @@ def test_rejects_nonpositive_hash_table_count(spark: SparkSession) -> None:
     shingles = spark.createDataFrame([(1, [1])], ["post_id", "shingles"])
     with pytest.raises(ValueError, match="num_hash_tables must be greater than zero"):
         spark_minhash_pairs(shingles, num_hash_tables=0)
+
+
+def test_several_empty_rows_are_dropped_without_a_crash(spark: SparkSession) -> None:
+    """Spark's hash step must never see a question without shingles."""
+    common = list(range(1, 11))
+    shingles = spark.createDataFrame(
+        [(1, common), (2, [*common, 11]), (3, []), (4, [])],
+        "post_id long, shingles array<long>",
+    )
+    pairs, empty_count = spark_minhash_pairs(shingles, 0.6, num_hash_tables=10)
+    assert empty_count == 2
+    assert [(row.dup_id, row.cand_id) for row in pairs.collect()] == [(2, 1)]
+
+
+@pytest.mark.parametrize(
+    ("threshold", "other", "expected_similarity"),
+    [(1.0, [1, 2, 3, 4], 1.0), (0.6, [1, 2, 3, 5], 0.6)],
+)
+def test_threshold_is_inclusive(
+    spark: SparkSession, threshold: float, other: list[int], expected_similarity: float
+) -> None:
+    """Identical sets pass 1.0, and a pair exactly at the cutoff is kept."""
+    shingles = spark.createDataFrame([(1, [1, 2, 3, 4]), (2, other)], ["post_id", "shingles"])
+    pairs, _ = spark_minhash_pairs(shingles, threshold, num_hash_tables=20)
+    (row,) = pairs.collect()
+    assert row.est_sim == pytest.approx(expected_similarity)
+
+
+def test_same_seed_gives_the_same_pairs(spark: SparkSession) -> None:
+    """A repeated call, with the rows split differently, returns identical candidates."""
+    rows = [(i, [i % 7, i % 11 + 20, i % 5 + 40]) for i in range(1, 61)]
+    shingles = spark.createDataFrame(rows, ["post_id", "shingles"])
+
+    def run(frame):
+        pairs, _ = spark_minhash_pairs(frame, 0.2, num_hash_tables=2, seed=7)
+        return sorted((r.dup_id, r.cand_id, r.est_sim) for r in pairs.collect())
+
+    first = run(shingles)
+    assert first
+    assert run(shingles.repartition(5)) == first

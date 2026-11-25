@@ -6,6 +6,8 @@
 |---|---|
 | `exact.py` | Exact Jaccard similarity of every pair of questions that shares a shingle, with two engines |
 | `benchmark.py` | Times both engines on nested samples and checks that they return the same pairs |
+| `spark_baseline.py` | Spark ML's `MinHashLSH` as the library baseline (#11) |
+| `compare.py` | Exact search, our LSH and Spark `MinHashLSH` on one shared sample |
 
 ## Our code vs. libraries
 
@@ -15,6 +17,22 @@ functions, and the pair logic, Jaccard score and C4 output are ours. The shingle
 
 Input is C2 shingles `(post_id, shingles[, created])`; output is C4 `(dup_id, cand_id, est_sim)`, where
 `est_sim` is the exact Jaccard similarity and `dup_id` is the newer question.
+
+For #11 the MinHash and join are Spark ML's library code (`MinHashLSH`); our part turns shingles into
+its binary vectors (over a sorted vocabulary, so a seed fixes the result), converts the similarity
+threshold into its distance cutoff and returns C4 rows.
+
+## Spark baseline and the shared comparison
+
+```python
+from src.baselines.spark_baseline import spark_minhash_pairs
+pairs, n_empty = spark_minhash_pairs(shingles, similarity_threshold=0.6, num_hash_tables=5, seed=42)
+```
+
+```bash
+python -m src.baselines.compare --posts data/parquet/superuser/posts_text \
+    --answer-key data/answer_key/superuser --out results/e5_baselines --master local[*]
+```
 
 ## Exact baseline
 
