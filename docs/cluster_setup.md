@@ -127,3 +127,11 @@ up only its local temporary directory; the HDFS smoke-test file is kept at
 Hadoop and Spark daemon logs are under their respective `$HADOOP_HOME/logs`
 and `$SPARK_HOME/logs` directories. Diagnose startup/network errors there
 before restarting; do not delete HDFS NameNode or DataNode directories.
+
+## Python interpreter on both laptops
+
+PySpark workers on Laptop B must use the same Python interpreter path as the
+driver on Laptop A. Export `PYSPARK_PYTHON` to that shared path (for example,
+`/home/team/duphunter/.venv/bin/python`) on both machines before running
+`scripts/cluster/run_core.sh`, which passes `PYSPARK_PYTHON` to executors and
+ships `src/` via `--py-files`.

@@ -1,0 +1,14 @@
+% Builds the WS2 report fragment on its own, to check its length and that it compiles.
+% From the repository root:  cd docs/report/standalone && tectonic ws2.tex
+% (the citation keys show as undefined until WS3 adds docs/report/refs.bib)
+\documentclass[11pt,twocolumn]{article}
+\usepackage{amsmath,amssymb,booktabs,graphicx,hyperref,cite}
+\graphicspath{{../../../}}
+\input{../ws2_method_similarity}
+\begin{document}
+\wstwoRelated
+\wstwoMethodology
+\wstwoResults
+\wstwoAnalysis
+\wstwoContribution
+\end{document}

@@ -63,7 +63,52 @@ def test_command_enables_the_event_log_and_passes_the_fraction():
     assert "spark.eventLog.enabled=true" in command
     assert "spark.eventLog.dir=hdfs:///spark-logs" in command
     assert command[command.index("--name") + 1] == "e8_C_8+8_0.5_run2"
-    assert command[-3:] == ["--fraction", "0.5", "--x"]
+    assert command[command.index("--fraction") + 1] == "0.5"
+    assert command[-1] == "--x"  # extra application arguments come last
+
+
+def test_default_application_exists_and_is_the_core_pipeline():
+    assert commands.DEFAULT_APP == "scripts/cluster/stages.py"
+    assert (ROOT / commands.DEFAULT_APP).is_file()
+
+
+def test_master_is_passed_on_to_the_application():
+    # stages.py builds its own session from --master (default local[*]), which would win otherwise
+    command = commands.build_command("A", "2", 0.25, master="spark://a:7077")
+    app = command.index(commands.DEFAULT_APP)
+    assert command[app + 1 :].count("--master") == 1
+    rest = command[app + 1 :]
+    assert rest[rest.index("--master") + 1] == "spark://a:7077"
+
+
+def test_run_name_is_passed_on_to_the_application():
+    command = commands.build_command("B", "4+4", 0.25, run=2)
+    rest = command[command.index(commands.DEFAULT_APP) + 1 :]
+    assert rest[rest.index("--app-name") + 1] == command[command.index("--name") + 1]
+
+
+def test_py_files_are_shipped_before_the_application_only_when_given():
+    assert "--py-files" not in commands.build_command("A", "2", 0.25)
+    command = commands.build_command("A", "2", 0.25, py_files="/tmp/src.zip")
+    assert command[command.index("--py-files") + 1] == "/tmp/src.zip"
+    assert command.index("--py-files") < command.index(commands.DEFAULT_APP)
+
+
+def test_each_run_has_its_own_outputs_and_metrics_file():
+    first = commands.build_command("A", "2", 0.25, run=1)
+    second = commands.build_command("A", "2", 0.25, run=2)
+    root = first[first.index("--output-root") + 1]
+    assert root == "hdfs:///data/e8_scaling/e8_A_2_0.25_run1"
+    assert second[second.index("--output-root") + 1] != root
+    assert first[first.index("--metrics-out") + 1] == (
+        "results/e8_scaling/run_metrics/e8_A_2_0.25_run1.csv"
+    )
+
+
+def test_only_the_chosen_setting_runs_unless_told_otherwise():
+    command = commands.build_command("A", "2", 0.25)
+    assert command[command.index("--setting") + 1] == "chosen"
+    assert "--setting" not in commands.build_command("A", "2", 0.25, setting=None)
 
 
 def test_plans_cover_the_proposal_tables():
@@ -99,6 +144,14 @@ def test_shell_wrapper_dry_run():
     )  # fmt: skip
     assert result.returncode == 0, result.stderr
     assert "spark-submit" in result.stdout
+
+
+def test_dry_run_ships_a_zip_of_src(capsys):
+    assert run_scaling.main(["--test", "A", "--cores", "2", "--dry-run", "--runs", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "--py-files" in out
+    assert "src.zip" in out
+    assert "scripts/cluster/stages.py" in out
 
 
 def test_zero_runs_is_rejected():

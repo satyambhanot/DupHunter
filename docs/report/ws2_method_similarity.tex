@@ -1,0 +1,188 @@
+% WS2 report fragment (issue #37): related work, methodology (similarity engine),
+% results (E1, E2, E3), analysis (S-curves and lexical gap), and individual contribution.
+% No preamble when included via \input in docs/report/main.tex (WS3).
+% Defines \wstwoRelated (Section 3), \wstwoMethodology (Section 5),
+% \wstwoResults (Section 8 parts), \wstwoAnalysis (Section 9 parts),
+% and \wstwoContribution (Section 11).
+% The figure is results/e3_lsh_real/s_curves.png: the report preamble needs
+% \graphicspath{{<path to the repository root>/}} (docs/report/standalone/ws2.tex shows it).
+% Every empirical number carries a "% source:" comment.
+%
+% Citation keys for docs/report/refs.bib (WS3):
+%   \cite{broder1997minhash, broder2000syntactic, indyk1998approximate,
+%         gionis1999similarity, leskovec2020mmds, zaharia2016spark}
+
+\newcommand{\wstwoRelated}{%
+\section{Related Work}
+
+\paragraph{Duplicate detection in community Q\&A.}
+Finding duplicate questions in Stack Overflow-style sites is an information retrieval problem. Neural
+sentence encoders capture paraphrases, but comparing every new question with millions of old ones is
+too costly without a cheap first stage; lexical near-neighbour search with MinHash and LSH is such a stage,
+and it is the one we build.
+
+\paragraph{MinHash and locality-sensitive hashing.}
+MinHash \cite{broder1997minhash, broder2000syntactic} estimates the Jaccard similarity of documents from short signatures. Indyk and Motwani
+\cite{indyk1998approximate} and Gionis et al. \cite{gionis1999similarity} formalized Locality-Sensitive
+Hashing (LSH) for sub-linear similarity search in high-dimensional spaces. Leskovec, Rajaraman,
+and Ullman \cite{leskovec2020mmds} detail the standard AND-OR banding technique, where signature vectors
+are partitioned into $b$ bands of $r$ rows, yielding the characteristic $S$-curve collision probability
+$1 - (1 - s^r)^b$.
+
+\paragraph{Distributed similarity on Apache Spark.}
+Spark's \texttt{MinHashLSH} \cite{zaharia2016spark} amplifies only by OR over several hash tables, without
+the choice of rows per band. We implement shingling, MinHash and banded LSH ourselves on Spark DataFrames, with hooks for
+oversized buckets and topic blocking; the library is used only as a baseline (E5).
+}
+
+\newcommand{\wstwoMethodology}{%
+\section{Similarity Engine Methodology}
+
+Question text (Contract C1) becomes candidate pairs (Contract C4) in three stages: shingling, MinHash, LSH banding.
+
+\paragraph{Text cleaning and shingling (Stage C1 $\to$ C2).}
+The shingler strips HTML tags, decodes the common entities, and isolates \texttt{<code>} and \texttt{<pre>} blocks
+into a separate \texttt{code\_shingles} stream so that syntax does not dilute the natural-language vocabulary. The
+cleaned text is cut into word $k$-grams or character $q$-grams, and each shingle is hashed to an integer in
+$[0, 2^{31}-1)$:
+\begin{equation}
+  \text{hash}(t) = \text{xxHash64}(t) \bmod (2^{31}-1)
+\end{equation}
+An optional threshold, \texttt{drop\_common\_share}, drops the most common shingles.
+
+\paragraph{MinHash signatures from scratch (Stage C2 $\to$ C3).}
+MinHash maps a shingle set $S$ to a signature of $n$ integers, using $n$ universal linear hash functions
+\cite{leskovec2020mmds}:
+\begin{equation}
+  h_i(x) = (a_i \cdot x + b_i) \bmod p, \quad i = 1, \dots, n
+\end{equation}
+where $p = 2^{31}-1$ is prime and $a_i, b_i$ are drawn from $[1, p-1]$ with a fixed seed (42), so that a shorter
+signature is the exact prefix of a longer one.
+
+Component $i$ of the signature is $h_{\min, i}(S) = \min_{x \in S} h_i(x)$ (an empty set gets $p$), and
+
+the probability that two components agree equals the Jaccard similarity:
+\begin{equation}
+  P\bigl(h_{\min, i}(A) = h_{\min, i}(B)\bigr) = J(A, B) = \frac{|A \cap B|}{|A \cup B|}
+\end{equation}
+The share of equal components is an unbiased estimate $\hat{J}$ with standard deviation $\sqrt{J(1-J)/n}$.
+
+\paragraph{Locality-sensitive hashing banding (Stage C3 $\to$ C4).}
+To avoid comparing all pairs of questions, the signature is divided into $b$ bands of $r$ rows ($n = b \cdot r$).
+In band $j$ the $r$ values are turned into a bucket key (a SHA-1 digest of the band index and the values):
+\begin{equation}
+  \text{bucket}_j = \text{SHA1}\bigl(j, h_{j \cdot r + 1}, \dots, h_{(j+1) \cdot r}\bigr)
+\end{equation}
+Two questions are candidates if they share a bucket in at least one band, which for similarity $s$ happens with
+probability (the $S$-curve)
+\begin{equation}
+  P(\text{collision} \mid s) = 1 - (1 - s^r)^b
+\end{equation}
+The curve rises steeply near the threshold
+\begin{equation}
+  t \approx \left(\frac{1}{b}\right)^{1/r}.
+\end{equation}
+
+\paragraph{Distributed candidate generation and plug-in hooks.}
+Signatures are grouped by (band, bucket key) and each bucket is joined with itself. Two hooks keep this from
+exploding on popular buckets: \texttt{--bucket-policy} drops or limits buckets above a size (e.g.\ $|B| > 1{,}000$; E7), and
+\texttt{--groups} prefixes the keys with a topic group, so questions of different groups never meet (E6).
+Candidates follow Contract C4: \texttt{dup\_id} (the newer question), \texttt{cand\_id} and \texttt{est\_sim}.
+}
+
+\newcommand{\wstwoResults}{%
+\section{Similarity Engine Results (E1, E2, E3)}
+
+Each design choice was settled on the Super User data.
+
+\begin{figure*}[!t]
+\centering
+% Graphic generated by src/similarity/lsh_measure.py
+\includegraphics[width=0.7\textwidth]{results/e3_lsh_real/s_curves.png}
+\caption{Predicted $S$-curve (line) and measured collision rate (points), per setting (E3).}
+\label{fig:e3_scurves}
+% source: results/e3_lsh_real/s_curves.png
+\end{figure*}
+
+\paragraph{Experiment E1: Text representation (shingles).}
+Experiment E1 evaluated 14 representation options on the \texttt{pairs\_e1} benchmark (2,000 labelled
+duplicate pairs and 2,000 random non-duplicate pairs) using exact Jaccard similarity.
+Table~\ref{tab:e1_representation} summarizes the key configurations.
+
+\begin{table*}[!t]
+\centering
+\small
+\caption{Experiment E1: Text representation comparison on Super User labelled pairs.}
+\label{tab:e1_representation}
+\begin{tabular}{lrrrr}
+\toprule
+Option & Median $J_{\text{dup}}$ & AUC & $J \ge 0.2$ & Shingles/Q \\
+\midrule
+Word 1-g, title+body, drop 5\% & 0.080 & \textbf{0.957} & 11.8\% & 30.8 \\
+Char 5-g, title+body & 0.078 & 0.930 & 4.8\% & 507.9 \\
+Word 1-g, title+body+code & 0.180 & 0.911 & 37.9\% & 76.5 \\
+\textbf{Word 1-g, title only} & \textbf{0.143} & 0.896 & \textbf{35.2\%} & \textbf{9.6} \\
+Word 2-g, title+body & 0.034 & 0.886 & 3.0\% & 104.8 \\
+Word 3-g, title+body & 0.009 & 0.806 & 1.9\% & 111.1 \\
+\bottomrule
+\end{tabular}
+% source: results/e1_representation/options.csv, results/e1_representation/README.md
+\end{table*}
+
+Word 1-grams of title and body with 5\% common shingles dropped separate best (AUC 0.957), but only 11.8\% of duplicate
+pairs reach $J \ge 0.2$. \textbf{Word 1-grams of the title} keep more duplicates above practical thresholds
+(35.2\% at $J \ge 0.2$, 8.9\% at $J \ge 0.4$) with only 9.6 shingles per question, and random pairs share no title word
+(median 0). We use them in E2 and E3.
+
+\paragraph{Experiment E2: MinHash signature length.}
+E2 tested signature lengths $n \in \{32, 64, 128, 256\}$ across 1,000 duplicate pairs,
+1,000 random pairs, and 1,800 synthetic set pairs spanning similarities $J \in [0.1, 0.9]$.
+The empirical estimation error closely tracked the theoretical bound $\sqrt{J(1-J)/n}$:
+at $J = 0.5$, the measured standard error was 0.093 for $n=32$ (theory 0.088), 0.065 for $n=64$
+% source: results/e2_signature/accuracy.csv (Measured spread at J=0.5)
+(theory 0.063), 0.049 for $n=128$ (theory 0.044), and 0.031 for $n=256$ (theory 0.031).
+The bias was below 0.016 in every configuration.
+
+Signing 5,000 questions took 0.4 to 0.6\,s for every $n$ (a single core), and the signatures take 5.1\,MB at $n=128$ (1\,KB per question)
+% source: results/e2_signature/cost.csv
+. We chose $n=128$: error under 0.05 at $J=0.5$ and many factorizations $b \cdot r = 128$.
+
+\paragraph{Experiment E3: LSH band/row setting trade-offs.}
+Experiment E3 evaluated three $(b, r)$ settings on 9,583 Super User questions containing 2,007 labelled
+duplicate pairs (bucket limit 1,000):
+\begin{itemize}
+  \item $b = 64, r = 2$ ($t = 0.125$): Emitted 3,892,580 candidate pairs (reduction ratio 0.915),
+        % source: results/e3_lsh_real/tradeoff.csv
+        achieving Recall@10 of 0.298 and MAP of 0.207 in 50\,s.
+  \item $b = 32, r = 4$ ($t = 0.420$): Emitted 73,889 candidate pairs (reduction ratio 0.998),
+        % source: results/e3_lsh_real/tradeoff.csv
+        achieving Recall@10 of 0.115 and MAP of 0.099 in 15\,s.
+  \item $b = 16, r = 8$ ($t = 0.707$): Emitted 153 candidate pairs (reduction ratio 1.000),
+        % source: results/e3_lsh_real/tradeoff.csv
+        achieving Recall@10 of 0.017 in 6\,s.
+\end{itemize}
+We use $b = 32, r = 4$ for the full runs: it keeps 0.2\% of all pairs. $b=64, r=2$ is the high-recall comparison on samples.
+}
+
+\newcommand{\wstwoAnalysis}{%
+\section{Similarity Engine Analysis}
+
+\paragraph{Theoretical vs.\ measured $S$-curves.}
+On 4,000 labelled and random pairs, the share of pairs that collide per bin of exact Jaccard is compared with
+$1 - (1 - s^r)^b$ (Figure~\ref{fig:e3_scurves}).
+
+The mean absolute deviation of measurement from theory is 0.031 for $b=32, r=4$
+% source: results/e3_lsh_real/README.md
+, 0.027 for $b=64, r=2$ and 0.009 for $b=16, r=8$. For $b=32, r=4$ the bin $[0.3, 0.4)$ matches (0.383 against 0.384);
+above 0.4 it is lower (0.659 against 0.738 at $[0.4, 0.5)$); this may be because the prediction is taken at the bin middle while pairs lie nearer its lower end (40 to 85 pairs per bin).
+
+\paragraph{Vocabulary divergence.}
+Labelled duplicates share few words (35.2\% have title Jaccard $\ge 0.2$, 8.9\% reach $0.4$), so recall is low at every
+threshold: $b=32, r=4$ ($t=0.42$) finds 11.5\% at Recall@10, and $b=64, r=2$ ($t=0.125$) finds 29.8\% with 53 times as many
+candidates. We did not measure an exact-search recall at the same cutoffs, so this is a trade-off, not an upper bound.
+}
+
+\newcommand{\wstwoContribution}{%
+Iesrat Jahan wrote the similarity engine (Workstream 2): shingling (\texttt{src/similarity/shingles.py}), MinHash from scratch
+(\texttt{minhash.py}) and banded LSH with the bucket-policy and grouping hooks (\texttt{lsh.py}). % TODO(team): agree who is named for the E1--E3 study scripts before submission
+}
