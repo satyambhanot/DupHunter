@@ -159,6 +159,98 @@ def profile_buckets(
     return _profile_from_histogram(counts)
 
 
+def _bucket_histogram(
+    signatures: DataFrame,
+    bands: int,
+    rows_per_band: int,
+) -> dict[int, int]:
+    """Return ``{bucket_size: num_buckets}`` for LSH banding over ``signatures``."""
+    band_exprs = [
+        F.struct(
+            F.lit(b_idx).alias("band"),
+            F.sha2(
+                F.concat_ws(
+                    ",",
+                    F.slice(F.col("signature"), b_idx * rows_per_band + 1, rows_per_band),
+                ),
+                256,
+            ).alias("bucket_key"),
+        )
+        for b_idx in range(bands)
+    ]
+    buckets = signatures.select(F.explode(F.array(*band_exprs)).alias("_b")).select(
+        F.col("_b.band").alias("band"),
+        F.col("_b.bucket_key").alias("bucket_key"),
+    )
+    hist_rows = (
+        buckets.groupBy("band", "bucket_key")
+        .agg(F.count(F.lit(1)).alias("_bucket_size"))
+        .groupBy("_bucket_size")
+        .agg(F.count(F.lit(1)).alias("_num_buckets"))
+        .collect()
+    )
+    return {int(row["_bucket_size"]): int(row["_num_buckets"]) for row in hist_rows}
+
+
+def profile_lsh_strategies(
+    posts: DataFrame,
+    *,
+    strategies: Sequence[str] = ("none", "drop_common_shingles"),
+    bucket_limit: int = 1000,
+    drop_common_share: float = 0.05,
+    shingle_k: int = 1,
+    num_perm: int = 128,
+    bands: int = 32,
+    rows_per_band: int = 4,
+    output_path: str | Path | None = None,
+    fields: str = "title",
+) -> list[dict[str, object]]:
+    """Profile raw LSH bucket sizes (without pair expansion) and optionally write CSV."""
+    if fields not in ("title", "title+body"):
+        raise ValueError(f"fields must be 'title' or 'title+body', got {fields!r}")
+    text = posts.withColumn("body", F.lit("")) if fields == "title" else posts
+    mh_cfg = MinHashConfig(n=num_perm)
+
+    shares: list[tuple[str, float | None]] = [("none", None)]
+    if "drop_common_shingles" in strategies:
+        shares.append(("drop_common_shingles", drop_common_share))
+
+    rows: list[dict[str, object]] = []
+    for label, share in shares:
+        shingle_cfg = ShingleConfig(representation="word", k=shingle_k, drop_common_share=share)
+        shingles = build_shingles(text, config=shingle_cfg)
+        sigs = build_signatures(shingles, config=mh_cfg)
+        counts = _bucket_histogram(sigs, bands=bands, rows_per_band=rows_per_band)
+        prof = _profile_from_histogram(counts)
+        over_buckets = sum(freq for size, freq in counts.items() if size > bucket_limit)
+        over_pairs = sum(
+            (size * (size - 1) // 2) * freq for size, freq in counts.items() if size > bucket_limit
+        )
+        over_share = (over_pairs / prof.total_pairs) if prof.total_pairs > 0 else 0.0
+        rows.append(
+            {
+                "strategy": label,
+                "bucket_limit": bucket_limit,
+                "drop_common_share": share if share is not None else "",
+                **prof.to_dict(),
+                "buckets_over_limit": over_buckets,
+                "over_limit_pairs": over_pairs,
+                "over_limit_share": round(over_share, 6),
+            }
+        )
+
+    if output_path is not None and rows:
+        out_path = Path(output_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fieldnames = list(rows[0].keys())
+        with out_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+    return rows
+
+
 def size_limit(max_size: int = 1000) -> Callable[[DataFrame], DataFrame]:
     """Return a Contract Hook 1 policy dropping buckets with more than ``max_size`` items."""
     if max_size < 1:
@@ -307,7 +399,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for E7 big-bucket comparison."""
     parser = argparse.ArgumentParser(description="Profile and compare E7 big-bucket strategies.")
     parser.add_argument("--posts", required=True, help="Parquet path for C1 posts.")
-    parser.add_argument("--answer-key", required=True, help="Parquet path for C6 answer key.")
+    parser.add_argument("--answer-key", default=None, help="Parquet path for C6 answer key.")
     parser.add_argument(
         "--output",
         default="results/e7_buckets/bucket_comparison.csv",
@@ -337,6 +429,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--num-perm", type=int, default=128, help="MinHash signature length.")
     parser.add_argument("--bands", type=int, default=32, help="LSH band count.")
     parser.add_argument("--rows", type=int, default=4, help="LSH rows per band.")
+    parser.add_argument("--profile-out", default=None, help="Optional CSV path for bucket profile.")
+    parser.add_argument(
+        "--profile-only",
+        action="store_true",
+        help="Write --profile-out without running full candidate-pair comparison.",
+    )
     parser.add_argument("--master", default=None, help="Optional Spark master URL.")
     return parser.parse_args(argv)
 
@@ -344,26 +442,42 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for E7 big-bucket strategy comparison."""
     args = parse_args(argv)
+    if not args.profile_only and not args.answer_key:
+        raise SystemExit("--answer-key is required unless --profile-only is set")
     builder = SparkSession.builder.appName("DupHunter-E7-Buckets")
     if args.master:
         builder = builder.master(args.master)
     spark = builder.getOrCreate()
     try:
         posts = spark.read.parquet(args.posts)
-        answer_key = spark.read.parquet(args.answer_key)
-        compare_bucket_strategies(
-            posts=posts,
-            answer_key=answer_key,
-            strategies=args.strategies,
-            bucket_limit=args.bucket_limit,
-            drop_common_share=args.drop_common_share,
-            shingle_k=args.shingle_k,
-            num_perm=args.num_perm,
-            bands=args.bands,
-            rows_per_band=args.rows,
-            output_path=args.output,
-            fields=args.fields,
-        )
+        if args.profile_out:
+            profile_lsh_strategies(
+                posts=posts,
+                strategies=args.strategies,
+                bucket_limit=args.bucket_limit,
+                drop_common_share=args.drop_common_share,
+                shingle_k=args.shingle_k,
+                num_perm=args.num_perm,
+                bands=args.bands,
+                rows_per_band=args.rows,
+                output_path=args.profile_out,
+                fields=args.fields,
+            )
+        if not args.profile_only:
+            answer_key = spark.read.parquet(args.answer_key)
+            compare_bucket_strategies(
+                posts=posts,
+                answer_key=answer_key,
+                strategies=args.strategies,
+                bucket_limit=args.bucket_limit,
+                drop_common_share=args.drop_common_share,
+                shingle_k=args.shingle_k,
+                num_perm=args.num_perm,
+                bands=args.bands,
+                rows_per_band=args.rows,
+                output_path=args.output,
+                fields=args.fields,
+            )
     finally:
         spark.stop()
     return 0
