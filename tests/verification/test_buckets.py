@@ -7,13 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from src.similarity.lsh import resolve_bucket_policy
+from src.similarity.lsh import LSHConfig, resolve_bucket_policy
 from src.verification.buckets import (
     COMPARISON_COLUMNS,
+    PROFILE_COLUMNS,
     compare_bucket_strategies,
     count_lost_answer_pairs,
+    main,
+    parse_args,
     profile_bucket_sizes,
     profile_buckets,
+    profile_lsh_buckets,
     size_limit,
 )
 
@@ -173,6 +177,57 @@ class TestBucketComparison:
         assert row["total_answer_pairs"] == 1
         assert row["lost_answer_pairs"] == 0
         assert row["recall@10"] == 1.0
+
+    def test_bucket_profile_counts_what_the_size_limit_removes(self, spark) -> None:
+        # one band of 2 rows. Posts 1-5 share a bucket of 5; 6 and 7 a bucket of 2; 8 is alone
+        rows = [(i, 100 + i, [1, 1]) for i in range(1, 6)]
+        rows += [(6, 106, [2, 2]), (7, 107, [2, 2]), (8, 108, [3, 3])]
+        sigs = spark.createDataFrame(rows, ["post_id", "created", "signature"])
+        key = spark.createDataFrame(
+            [(2, 1), (4, 3), (7, 6), (8, 1), (900, 800)], ["dup_id", "original_id"]
+        )
+        profile = profile_lsh_buckets(sigs, key, LSHConfig(b=1, r=2, n=2), bucket_limit=3)
+        assert (profile["num_buckets"], profile["max_size"], profile["total_pairs"]) == (3, 5, 11)
+        assert profile["buckets_over_limit"] == 1
+        assert profile["pairs_over_limit"] == 10
+        assert profile["share_of_pairs_over_limit"] == pytest.approx(10 / 11)
+        assert profile["answer_pairs"] == 4  # (900, 800) is outside the signatures
+        assert profile["answer_pairs_sharing_a_bucket"] == 3  # not (8, 1)
+        assert profile["answer_pairs_only_in_oversize_buckets"] == 2  # (2, 1) and (4, 3)
+
+    def test_pair_that_also_shares_a_small_bucket_is_not_lost_to_the_limit(self, spark) -> None:
+        # band 0 puts all four posts together; in band 1 only 1 and 2 meet
+        rows = [(1, 1, [7, 5]), (2, 2, [7, 5]), (3, 3, [7, 6]), (4, 4, [7, 8])]
+        sigs = spark.createDataFrame(rows, ["post_id", "created", "signature"])
+        key = spark.createDataFrame([(2, 1), (4, 3)], ["dup_id", "original_id"])
+        profile = profile_lsh_buckets(sigs, key, LSHConfig(b=2, r=1, n=2), bucket_limit=3)
+        assert profile["answer_pairs_sharing_a_bucket"] == 2
+        assert profile["answer_pairs_only_in_oversize_buckets"] == 1  # only (4, 3)
+
+    def test_profile_command_writes_one_row(self, spark, tmp_path: Path) -> None:
+        sigs = spark.createDataFrame(
+            [(1, 1, [1, 1]), (2, 2, [1, 1])], ["post_id", "created", "signature"]
+        )
+        sigs.write.parquet(str(tmp_path / "sigs"))
+        spark.createDataFrame([(2, 1)], ["dup_id", "original_id"]).write.parquet(
+            str(tmp_path / "key")
+        )
+        out = tmp_path / "profile.csv"
+        argv = ["--signatures", str(tmp_path / "sigs"), "--answer-key", str(tmp_path / "key")]
+        argv += ["--bands", "1", "--rows", "2", "--num-perm", "2", "--profile-out", str(out)]
+        assert main([*argv, "--master", "local[2]"]) == 0
+        with out.open() as handle:
+            (row,) = list(csv.DictReader(handle))
+        assert list(row) == list(PROFILE_COLUMNS)
+        assert row["answer_pairs_sharing_a_bucket"] == "1"
+
+    def test_command_needs_exactly_one_input(self) -> None:
+        for argv in (
+            ["--answer-key", "k"],
+            ["--answer-key", "k", "--posts", "p", "--signatures", "s"],
+        ):
+            with pytest.raises(SystemExit):
+                parse_args(argv)
 
     def test_compare_rejects_unknown_fields(self, spark) -> None:
         posts = spark.createDataFrame([(1, 1, "t", "b")], ["post_id", "created", "title", "body"])
