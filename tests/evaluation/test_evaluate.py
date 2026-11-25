@@ -111,6 +111,42 @@ def test_per_pair_table_takes_exact_jaccard(spark):
     assert row.exact_jaccard == pytest.approx(0.75) and row.tags is None
 
 
+def test_exact_for_pairs_covers_found_and_missed_pairs(spark):
+    key = _key(spark, [(10, 1), (20, 5), (30, 7)])
+    shingles = spark.createDataFrame(
+        [(10, [1, 2, 3]), (1, [2, 3, 4]), (20, [8]), (5, [9]), (30, [1])],  # 7 has no shingles
+        "post_id long, shingles array<int>",
+    )
+    exact = {
+        (r.dup_id, r.cand_id): r.jaccard for r in evaluate.exact_for_pairs(key, shingles).collect()
+    }
+    assert exact == {(10, 1): pytest.approx(0.5), (20, 5): 0.0}
+    # a pair without shingles keeps an empty similarity in the table instead of disappearing
+    table = evaluate.per_pair_table(
+        _cands(spark, [(10, 1, 0.9)]), key, exact=evaluate.exact_for_pairs(key, shingles)
+    )
+    rows = {r.dup_id: (r.found, r.exact_jaccard) for r in table.collect()}
+    assert rows[10] == (True, pytest.approx(0.5))
+    assert rows[20] == (False, 0.0)
+    assert rows[30] == (False, None)
+
+
+def test_command_line_computes_exact_similarity_from_shingles(spark, tmp_path):
+    _cands(spark, [(10, 2, 0.8)]).write.parquet(str(tmp_path / "cands"))
+    _key(spark, [(10, 2)]).write.parquet(str(tmp_path / "key"))
+    spark.createDataFrame(
+        [(10, [1, 2]), (2, [1, 2])], "post_id long, shingles array<int>"
+    ).write.parquet(str(tmp_path / "shingles"))
+    argv = ["--candidates", str(tmp_path / "cands"), "--answer-key", str(tmp_path / "key")]
+    argv += ["--out", str(tmp_path / "m.csv"), "--experiment", "E3", "--n-questions", "10"]
+    argv += ["--per-pair-out", str(tmp_path / "pp"), "--shingles", str(tmp_path / "shingles")]
+    assert evaluate.main(argv) == 0
+    (row,) = spark.read.parquet(str(tmp_path / "pp")).collect()
+    assert row.exact_jaccard == pytest.approx(1.0)
+    with pytest.raises(SystemExit):  # the two sources of similarity exclude each other
+        evaluate.parse_args(argv + ["--exact", "x"])
+
+
 def test_command_line_end_to_end(spark, tmp_path):
     candidates = _cands(spark, [(10, 1, 0.9), (10, 2, 0.8), (20, 5, 0.9)])
     candidates.write.parquet(str(tmp_path / "cands"))
