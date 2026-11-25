@@ -31,13 +31,15 @@ scripts/run_scaling.sh --test B --cores 4+4 --runs 1 --master spark://<laptop-a-
 ```
 
 The application is `scripts/cluster/stages.py`, the core pipeline of #31. It must accept `--fraction`
-(the share of the data to use), `--master`, `--output-root` and `--metrics-out`. Every run is a fresh
+(the share of the data to use), `--master`, `--app-name`, `--output-root` and `--metrics-out`. Every run is a fresh
 Spark application named `e8_<test>_<cores>_<fraction>_run<k>`, with its event log written to
 `hdfs:///spark-logs` (`--event-log-dir` changes it). The runner also:
 
 - ships a fresh zip of `src` with `--py-files` (executors import `src.*` inside Spark tasks; give your own
   with `--py-files`);
 - passes `--master` to the application, which builds its own session and would otherwise use `local[*]`;
+- passes the run name as `--app-name`: the name set by the application replaces `spark-submit --name`,
+  and `parse_eventlogs.py` identifies each run by it;
 - writes each run under `hdfs:///data/e8_scaling/<run name>` and its metrics under
   `results/e8_scaling/run_metrics/`, so a scaling run never overwrites the core pipeline outputs or
   adds rows to `results/metrics.csv`;

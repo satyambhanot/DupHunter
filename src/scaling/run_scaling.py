@@ -59,7 +59,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--app",
         default=commands.DEFAULT_APP,
-        help="application that accepts --fraction, --master, --output-root and --metrics-out",
+        help="application: takes --fraction, --master, --app-name, --output-root, --metrics-out",
     )
     parser.add_argument(
         "--py-files",

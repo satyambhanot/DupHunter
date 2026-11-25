@@ -26,6 +26,8 @@ checkpoint/
 *.fdb_latexmk
 *.fls
 *.synctex.gz
+# The report PDF is a build output. Add the final one at hand-in with: git add -f docs/report/main.pdf
+docs/report/main.pdf
 
 # OS and editors
 .DS_Store
