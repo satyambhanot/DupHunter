@@ -25,6 +25,7 @@ logger = logging.getLogger("duphunter.cluster.stages")
 
 STAGES: tuple[str, ...] = ("shingles", "minhash", "lsh", "evaluate")
 SAMPLE_BUCKETS: int = 10_000
+DEFAULT_APP_NAME = "duphunter-core-pipeline"
 
 
 def plan_stages(done: Collection[str] = ()) -> list[str]:
@@ -349,6 +350,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-root", help="Override output root directory/URI")
     parser.add_argument("--metrics-out", help="Override metrics CSV path")
     parser.add_argument("--master", default="local[*]", help="Spark master URL")
+    parser.add_argument(
+        "--app-name",
+        default=DEFAULT_APP_NAME,
+        help="Spark application name; it replaces spark-submit --name, and E8 reads it from logs",
+    )
     return parser.parse_args(argv)
 
 
@@ -360,9 +366,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parse_args(argv)
     config = load_config(args.config)
-    spark = (
-        SparkSession.builder.master(args.master).appName("duphunter-core-pipeline").getOrCreate()
-    )
+    spark = SparkSession.builder.master(args.master).appName(args.app_name).getOrCreate()
     try:
         summaries = run_pipeline(
             spark,

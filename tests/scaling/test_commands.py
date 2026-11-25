@@ -81,6 +81,12 @@ def test_master_is_passed_on_to_the_application():
     assert rest[rest.index("--master") + 1] == "spark://a:7077"
 
 
+def test_run_name_is_passed_on_to_the_application():
+    command = commands.build_command("B", "4+4", 0.25, run=2)
+    rest = command[command.index(commands.DEFAULT_APP) + 1 :]
+    assert rest[rest.index("--app-name") + 1] == command[command.index("--name") + 1]
+
+
 def test_py_files_are_shipped_before_the_application_only_when_given():
     assert "--py-files" not in commands.build_command("A", "2", 0.25)
     command = commands.build_command("A", "2", 0.25, py_files="/tmp/src.zip")

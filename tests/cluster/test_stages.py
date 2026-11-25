@@ -17,6 +17,7 @@ from scripts.cluster.stages import (
     STAGES,
     git_commit,
     load_config,
+    parse_args,
     plan_stages,
     run_pipeline,
     sample_posts,
@@ -247,6 +248,12 @@ class SparkPipelineTests(unittest.TestCase):
             self.assertEqual(settings["minhash"], {"n": 128, "seed": 42})
             self.assertEqual(settings["seed"], 42)
             self.assertIn("commit", settings)
+
+    def test_app_name_defaults_and_can_be_set(self) -> None:
+        self.assertEqual(parse_args([]).app_name, "duphunter-core-pipeline")
+        self.assertEqual(
+            parse_args(["--app-name", "e8_A_2_0.25_run1"]).app_name, "e8_A_2_0.25_run1"
+        )
 
     def test_git_commit_is_a_short_hash_or_none(self) -> None:
         commit = git_commit()
