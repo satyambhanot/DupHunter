@@ -188,6 +188,110 @@ def count_lost_answer_pairs(
     return lost_pairs, total_pairs, lost_pairs / total_pairs
 
 
+PROFILE_COLUMNS: tuple[str, ...] = (
+    *BucketProfile.__dataclass_fields__,
+    "bucket_limit",
+    "buckets_over_limit",
+    "pairs_over_limit",
+    "share_of_pairs_over_limit",
+    "answer_pairs",
+    "answer_pairs_sharing_a_bucket",
+    "answer_pairs_only_in_oversize_buckets",
+)
+
+
+def _limit_effect(
+    buckets: DataFrame, answer_key: DataFrame, bucket_limit: int
+) -> dict[str, int | float]:
+    """What ``size_limit(bucket_limit)`` removes, from ``(band, bucket_key, post_id)`` rows."""
+    sizes = buckets.groupBy("band", "bucket_key").count()
+    over = sizes.agg(
+        F.sum(F.when(F.col("count") > bucket_limit, 1).otherwise(0)).alias("buckets"),
+        F.sum(
+            F.when(F.col("count") > bucket_limit, F.col("count") * (F.col("count") - 1) / 2)
+        ).alias("pairs"),
+        F.sum(F.col("count") * (F.col("count") - 1) / 2).alias("all_pairs"),
+    ).collect()[0]
+
+    key = answer_key.select("dup_id", "original_id").distinct()
+    ids = key.select(F.col("dup_id").alias("post_id")).union(
+        key.select(F.col("original_id").alias("post_id"))
+    )
+    # Only the buckets of labelled questions are needed, and there are few of those questions.
+    labelled = buckets.join(F.broadcast(ids.distinct()), "post_id", "left_semi")
+    dup_side = labelled.select(F.col("post_id").alias("dup_id"), "band", "bucket_key")
+    original_side = labelled.select(F.col("post_id").alias("original_id"), "band", "bucket_key")
+    shared = (
+        key.join(dup_side, "dup_id")
+        .join(original_side, ["original_id", "band", "bucket_key"])
+        .join(sizes, ["band", "bucket_key"])
+        .groupBy("dup_id", "original_id")
+        .agg(F.min("count").alias("smallest_shared_bucket"))
+    )
+    found = shared.agg(
+        F.count(F.lit(1)).alias("sharing"),
+        F.sum(F.when(F.col("smallest_shared_bucket") > bucket_limit, 1).otherwise(0)).alias(
+            "only_oversize"
+        ),
+    ).collect()[0]
+
+    all_pairs = int(over["all_pairs"] or 0)
+    pairs_over = int(over["pairs"] or 0)
+    return {
+        "bucket_limit": bucket_limit,
+        "buckets_over_limit": int(over["buckets"] or 0),
+        "pairs_over_limit": pairs_over,
+        "share_of_pairs_over_limit": pairs_over / all_pairs if all_pairs else 0.0,
+        "answer_pairs": key.count(),
+        "answer_pairs_sharing_a_bucket": int(found["sharing"] or 0),
+        "answer_pairs_only_in_oversize_buckets": int(found["only_oversize"] or 0),
+    }
+
+
+def profile_lsh_buckets(
+    signatures: DataFrame,
+    answer_key: DataFrame,
+    config: LSHConfig,
+    bucket_limit: int = 1000,
+) -> dict[str, int | float]:
+    """Profile the LSH buckets of ``signatures`` without generating any candidate pair.
+
+    The signatures are banded exactly as ``find_candidates`` does it, the buckets are measured
+    through the bucket-policy hook, and then every bucket is dropped, so no pair is expanded.
+    Besides the sizes it reports what ``size_limit(bucket_limit)`` removes: the buckets and the
+    share of bucket pairs over the limit, and how many answer-key pairs share a bucket only in
+    buckets over the limit. Those are the pairs lost to the limit alone, which comparing runs
+    cannot show without a run that has no limit. A pair counted once per bucket in
+    ``pairs_over_limit`` may appear in several bands.
+
+    The answer key is restricted to the questions in ``signatures``.
+    """
+    key = restrict_answer_key(answer_key, signatures)
+    measured: dict[str, int | float] = {}
+
+    def measure(buckets: DataFrame) -> DataFrame:
+        if measured:
+            raise ValueError("the bucket profile needs all bands in one pass")
+        members = buckets.select("band", "bucket_key", "post_id").cache()
+        measured.update(profile_buckets(members).to_dict())
+        measured.update(_limit_effect(members, key, bucket_limit))
+        members.unpersist()
+        return buckets.limit(0)
+
+    find_candidates(signatures, config=config, bucket_policy=measure, bands_per_pass=config.b)
+    return measured
+
+
+def write_bucket_profile(profile: dict[str, int | float], path: str | Path) -> None:
+    """Write one bucket profile as a one-row CSV."""
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(PROFILE_COLUMNS))
+        writer.writeheader()
+        writer.writerow(profile)
+
+
 def _build_strategy_spec(
     name: str,
     bucket_limit: int,
@@ -306,7 +410,7 @@ def compare_bucket_strategies(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for E7 big-bucket comparison."""
     parser = argparse.ArgumentParser(description="Profile and compare E7 big-bucket strategies.")
-    parser.add_argument("--posts", required=True, help="Parquet path for C1 posts.")
+    parser.add_argument("--posts", help="Parquet path for C1 posts (needed for the comparison).")
     parser.add_argument("--answer-key", required=True, help="Parquet path for C6 answer key.")
     parser.add_argument(
         "--output",
@@ -338,7 +442,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--bands", type=int, default=32, help="LSH band count.")
     parser.add_argument("--rows", type=int, default=4, help="LSH rows per band.")
     parser.add_argument("--master", default=None, help="Optional Spark master URL.")
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--signatures",
+        help="Saved MinHash signatures Parquet (C3): write only the bucket profile of these.",
+    )
+    parser.add_argument(
+        "--profile-out",
+        default="results/e7_buckets/bucket_profile.csv",
+        help="Output CSV path for the bucket profile (with --signatures).",
+    )
+    args = parser.parse_args(argv)
+    if bool(args.posts) == bool(args.signatures):
+        parser.error("give --posts (strategy comparison) or --signatures (bucket profile)")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -349,8 +465,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         builder = builder.master(args.master)
     spark = builder.getOrCreate()
     try:
-        posts = spark.read.parquet(args.posts)
         answer_key = spark.read.parquet(args.answer_key)
+        if args.signatures:
+            profile = profile_lsh_buckets(
+                spark.read.parquet(args.signatures),
+                answer_key,
+                LSHConfig(b=args.bands, r=args.rows, n=args.num_perm),
+                bucket_limit=args.bucket_limit,
+            )
+            write_bucket_profile(profile, args.profile_out)
+            print(profile)
+            return 0
+        posts = spark.read.parquet(args.posts)
         compare_bucket_strategies(
             posts=posts,
             answer_key=answer_key,

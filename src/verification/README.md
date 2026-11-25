@@ -36,6 +36,22 @@ pairs. Signatures are built once per shingle setting and only the LSH step is ti
 from the Spark event log of each cluster run (`src/scaling/eventlogs.py`, `scripts/parse_eventlogs.py`)
 and are merged in when the full run (#31) is done.
 
+### Bucket profile (no candidate pairs, so it is cheap)
+
+```bash
+python -m src.verification.buckets --signatures data/signatures --answer-key data/answer_key \
+    --bucket-limit 1000 --profile-out results/e7_buckets/bucket_profile.csv --master local[*]
+```
+
+It bands the saved signatures like LSH does, measures the buckets and stops before pairing. Besides the
+sizes it reports how many buckets and what share of bucket pairs are over the limit, and
+`answer_pairs_only_in_oversize_buckets`: answer-key pairs that share a bucket **only** in buckets over
+the limit, which is what `size_limit` alone loses. A run without a limit is not needed for that.
+
+On the cluster, give the saved signatures of the full run
+(`--signatures hdfs:///data/core_pipeline/stackoverflow/100pct/signatures`) and submit with
+`--py-files src.zip` as in the E7 command of `results/e7_buckets/README.md`.
+
 ## Using TF-IDF Re-ranking (#40)
 
 ```bash
