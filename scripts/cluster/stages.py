@@ -16,7 +16,13 @@ from typing import Any
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from src.evaluation.evaluate import append_metrics, evaluate, per_pair_table, restrict_answer_key
+from src.evaluation.evaluate import (
+    append_metrics,
+    evaluate,
+    exact_for_pairs,
+    per_pair_table,
+    restrict_answer_key,
+)
 from src.similarity.lsh import LSHConfig, find_candidates, resolve_bucket_policy
 from src.similarity.minhash import MinHashConfig, build_signatures
 from src.similarity.shingles import ShingleConfig, build_shingles
@@ -109,6 +115,22 @@ def git_commit() -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip() or None
+
+
+def _posts_info(spark: SparkSession, posts_text_uri: str) -> DataFrame | None:
+    """The posts with their tags and unmodified body, for the per-pair table, if both are there.
+
+    The shingle stage may blank the body (``fields: title``), so the input is read again here.
+    """
+    posts = _read_parquet(spark, posts_text_uri)
+    missing = {"post_id", "tags", "body"} - set(posts.columns)
+    if missing:
+        logger.warning(
+            "posts_text lacks %s: tags and body_len stay empty in the per-pair table",
+            sorted(missing),
+        )
+        return None
+    return posts
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -297,7 +319,14 @@ def run_pipeline(
                     run_settings,
                     metrics,
                 )
-                table = per_pair_table(candidates_df, scoped_key)
+                table = per_pair_table(
+                    candidates_df,
+                    scoped_key,
+                    posts_text=_posts_info(spark, posts_text_uri),
+                    exact=exact_for_pairs(
+                        scoped_key, _read_parquet(spark, shared_paths["shingles"])
+                    ),
+                )
                 _write_parquet(table, paths["per_pair"])
                 logger.info(
                     "Stage evaluate (fraction=%s, setting=%s) finished in %.2fs -> %s",

@@ -49,3 +49,25 @@ eye. Every bin shows its pair count; bins with fewer than 20 pairs are flagged `
 `--bands` and `--rows` the similarity plot also draws the LSH theory `1 - (1 - s^r)^b`: misses at low
 similarity are expected, misses at high similarity are not. Needs pandas, pyarrow and matplotlib.
 ||||||| 558e3d9
+
+## The per-pair table of the full run (for the error analysis, #33)
+
+`stages.py` writes the per-pair table with every column filled: exact Jaccard from the saved shingles,
+and the tags and body length from `posts_text`. If the shingles, signatures and candidates of a run are
+already saved, only the evaluation has to be repeated, on the cluster:
+
+```bash
+scripts/cluster/run_core.sh --fraction 1.0 --setting chosen \
+    --done shingles --done minhash --done lsh --metrics-out /tmp/metrics_rerun.csv
+hdfs dfs -get /data/core_pipeline/stackoverflow/100pct/per_pair/chosen per_pair_chosen
+```
+
+`--metrics-out` keeps the repeated metrics row out of `results/metrics.csv`. Copy the whole Parquet folder
+(every answer-key pair, found and missed: recall needs both) to a laptop and run:
+
+```bash
+python -m src.evaluation.errors --per-pair per_pair_chosen --out results/error_analysis --bands 32 --rows 4
+```
+
+Keep it as Parquet: the tags are lists, which a Spark CSV cannot hold.
+

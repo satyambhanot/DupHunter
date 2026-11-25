@@ -29,6 +29,7 @@ from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 
 from src.evaluation.metrics import METRICS, mean_metrics, reduction_ratio
+from src.verification.rankers import compute_exact_jaccard
 
 COLUMNS = ["experiment", "settings_json", *METRICS, "reduction_ratio", "n_candidates"]
 DEFAULT_MAX_RANK = 100
@@ -92,6 +93,21 @@ def evaluate(
     result["n_candidates"] = n_candidates
     result["n_queries"] = len(pairs)
     return result
+
+
+def exact_for_pairs(answer_key: DataFrame, shingles: DataFrame) -> DataFrame:
+    """Exact Jaccard similarity of every answer-key pair, from C2 shingles.
+
+    Returns ``(dup_id, cand_id, jaccard)``, the ``exact`` input of ``per_pair_table``. It covers
+    the labelled pairs whether or not LSH found them, so recall can be broken down by similarity.
+    A pair with a question that has no shingle row is left out (its similarity stays empty).
+    """
+    pairs = answer_key.select(
+        "dup_id", F.col("original_id").alias("cand_id"), F.lit(0.0).alias("est_sim")
+    )
+    return compute_exact_jaccard(pairs, shingles).select(
+        "dup_id", "cand_id", F.col("exact_jaccard").alias("jaccard")
+    )
 
 
 def per_pair_table(
@@ -182,7 +198,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--per-pair-out", help="write the per-pair table (C8) here as Parquet")
     parser.add_argument("--posts-text", help="posts_text Parquet, for tags and body length in C8")
-    parser.add_argument("--exact", help="exact Jaccard Parquet (dup_id, cand_id, jaccard), for C8")
+    similarity = parser.add_mutually_exclusive_group()
+    similarity.add_argument(
+        "--exact", help="exact Jaccard Parquet (dup_id, cand_id, jaccard), for C8"
+    )
+    similarity.add_argument(
+        "--shingles",
+        help="C2 shingles Parquet: compute the exact Jaccard of the answer-key pairs, for C8",
+    )
     parser.add_argument("--master", default="local[*]", help="Spark master")
     return parser.parse_args(argv)
 
@@ -203,11 +226,14 @@ def main(argv: list[str] | None = None) -> int:
     metrics = evaluate(candidates, answer_key, n_questions, args.max_rank)
     append_metrics(args.out, args.experiment, settings, metrics)
     if args.per_pair_out:
+        exact = spark.read.parquet(args.exact) if args.exact else None
+        if args.shingles:
+            exact = exact_for_pairs(answer_key, spark.read.parquet(args.shingles))
         table = per_pair_table(
             candidates,
             answer_key,
             spark.read.parquet(args.posts_text) if args.posts_text else None,
-            spark.read.parquet(args.exact) if args.exact else None,
+            exact,
             args.max_rank,
         )
         table.write.mode("overwrite").parquet(args.per_pair_out)

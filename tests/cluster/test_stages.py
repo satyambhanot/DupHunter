@@ -204,10 +204,10 @@ class SparkPipelineTests(unittest.TestCase):
 
             self.spark.createDataFrame(
                 [
-                    (1, "python list comprehension syntax", "<p>body</p>"),
-                    (2, "python list comprehension syntax", "<p>dup</p>"),
+                    (1, "python list comprehension syntax", "<p>body</p>", ["python"]),
+                    (2, "python list comprehension syntax", "<p>dup</p>", ["python", "list"]),
                 ],
-                ["post_id", "title", "body"],
+                ["post_id", "title", "body", "tags"],
             ).write.parquet(posts_path)
             self.spark.createDataFrame(
                 [
@@ -248,6 +248,11 @@ class SparkPipelineTests(unittest.TestCase):
             self.assertEqual(settings["minhash"], {"n": 128, "seed": 42})
             self.assertEqual(settings["seed"], 42)
             self.assertIn("commit", settings)
+
+            (pair,) = self.spark.read.parquet(f"{output_root}/100pct/per_pair/chosen").collect()
+            self.assertAlmostEqual(pair.exact_jaccard, 1.0)  # the two titles are identical
+            self.assertEqual(sorted(pair.tags), ["list", "python"])
+            self.assertEqual(pair.body_len, len("<p>dup</p>"))  # the body before it was blanked
 
     def test_app_name_defaults_and_can_be_set(self) -> None:
         self.assertEqual(parse_args([]).app_name, "duphunter-core-pipeline")
