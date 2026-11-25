@@ -10,8 +10,8 @@ The run executed in distributed mode across two heterogeneous laptops connected 
 
 | Node | Role | Hardware Specs | Allocated Cores | Allocated Worker RAM | Network IP |
 |---|---|---|---|---|---|
-| **Laptop A** | Spark Master, HDFS NameNode, Spark Worker, HDFS DataNode | Intel Core i7-10750H (6C/12T, 2.60 GHz), 16 GB DDR4 | 8 cores | 8 GB | `192.168.50.10` |
-| **Laptop B** | Spark Worker, HDFS DataNode | AMD Ryzen 7 5700U (8C/16T, 1.80 GHz), 16 GB DDR4 | 4 cores | 5 GB | `192.168.50.11` |
+| **Laptop A** | Spark Master, HDFS NameNode, Spark Worker, HDFS DataNode | Intel Core i7-13650HX (14C/20T, up to 4.90 GHz), 16 GB DDR5 | 8 cores | 8 GB | `192.168.50.10` |
+| **Laptop B** | Spark Worker, HDFS DataNode | AMD Ryzen 7 5800H (8C/16T), 16 GB | 4 cores | 5 GB | `192.168.50.11` |
 
 - **Cluster Total:** 12 worker cores, 13 GB worker memory.
 - **Spark Version:** 3.5.3 (Standalone cluster manager).
