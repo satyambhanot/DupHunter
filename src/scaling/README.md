@@ -8,6 +8,7 @@
 | `run_scaling.py` | Runs the plan of a test, three runs per setting; `--dry-run` only prints the commands |
 | `eventlogs.py` | Reads Spark event logs and gives one row per run: total and stage times, shuffle bytes, peak memory, slowest vs. median task |
 | `amdahl.py` | `fit_serial_share(cores, times)`: the serial share of a run (Amdahl's law) |
+| `analyze.py` | Reads `runs.csv` (and `runs_data_scaling.csv` when it exists) and writes the summary tables and plots |
 | `scripts/run_scaling.sh`, `scripts/parse_eventlogs.py` | Thin wrappers around the modules above |
 
 ## The tests (Table 3 of the proposal)
@@ -54,10 +55,13 @@ hdfs dfs -get /spark-logs event-logs
 python scripts/parse_eventlogs.py --logs event-logs --out results/e8_scaling/runs.csv
 ```
 
-`runs.csv` belongs to WS4; the plots and the explanation of what limits speedup go to
-`results/e8_scaling/analysis/` (WS1) once the table exists. `amdahl.fit_serial_share` estimates the serial
-share from test A.
+`runs.csv` belongs to WS4. The tables, plots and the explanation of what limits speedup are in
+`results/e8_scaling/analysis/` (WS1); rebuild the tables and plots with:
+
+```bash
+python -m src.scaling.analyze
+```
 
 ## Our code vs. libraries
 
-All of it is our own code, using NumPy for the least-squares fit and Spark's own event logs as the data source.
+All of it is our own code, using NumPy for the least-squares fit, Matplotlib for the plots and Spark's own event logs as the data source.
