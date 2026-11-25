@@ -8,6 +8,16 @@ Core-count (**Test A**) and second-machine (**Test B**) scaling runs on the 25% 
 - **Laptop B (Worker B):** AMD Ryzen 8-core, 5g worker (`SPARK_WORKER_CORES=8`, `4` cores during `4+4`), `spark.executor.memory=4g`, `spark.driver.memory=2g`, local spill dir `/home/navjot/spark-tmp`.
 - **Conditions:** Both laptops plugged in on AC power, nothing else heavy running, fresh `spark-submit` application per run so Spark caching cannot carry over across runs.
 
+## Limits when comparing settings
+
+- **`B:8` is not a separate set of runs.** Its three rows in `runs.csv` are copies of the three `A, 8, 0.25`
+  rows, so the file has 24 rows and 21 distinct measurements.
+- **The input source differs.** The Test A runs (and therefore `B:8`) ran on Laptop B alone and read the
+  exported Parquet from its local disk (`file://`). The `A:8`, `4+4` and `8+8` runs read HDFS (see the
+  commands below). So a difference between `B:8` and another Test B setting mixes the effect of the number
+  of machines or cores with the effect of the data source. Test A is consistent within itself and is not
+  affected.
+
 ## Commands
 
 - **Two-laptop Test B (`4+4`, `8+8`):**
