@@ -1,5 +1,7 @@
 """NumPy MinHash signatures with a map-only Spark DataFrame wrapper."""
 
+import argparse
+import sys
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import partial
@@ -139,3 +141,41 @@ def build_signatures(
         ]
     )
     return posts.sparkSession.createDataFrame(signatures, output_schema)
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build C3 MinHash signatures from C2 shingle sets (Parquet)."
+    )
+    parser.add_argument("--shingles", required=True, help="C2 Parquet (post_id, shingles)")
+    parser.add_argument("--out", required=True, help="where to write the C3 Parquet")
+    parser.add_argument("--n", type=int, default=DEFAULT_CONFIG.n, help="signature length")
+    parser.add_argument("--seed", type=int, default=DEFAULT_CONFIG.seed, help="hash family seed")
+    parser.add_argument("--shingles-col", default="shingles", help="column holding the shingles")
+    parser.add_argument(
+        "--created-from",
+        help="Parquet with post_id and created (for example posts_text): adds created to C3",
+    )
+    parser.add_argument("--master", default="local[*]", help="Spark master")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Read C2, write C3 (plus ``created`` when ``--created-from`` is given)."""
+    args = parse_args(argv)
+    spark = SparkSession.builder.master(args.master).appName("duphunter-minhash").getOrCreate()
+    signatures = build_signatures(
+        spark.read.parquet(args.shingles),
+        MinHashConfig(n=args.n, seed=args.seed),
+        shingles_col=args.shingles_col,
+    )
+    if args.created_from:
+        created = spark.read.parquet(args.created_from).select("post_id", "created")
+        signatures = signatures.join(created.dropDuplicates(["post_id"]), "post_id", "left")
+    signatures.write.mode("overwrite").parquet(args.out)
+    print(f"wrote {args.out} (n={args.n}, seed={args.seed})", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -179,3 +179,29 @@ class TestBucketComparison:
         key = spark.createDataFrame([(1, 1)], ["dup_id", "original_id"])
         with pytest.raises(ValueError, match="fields"):
             compare_bucket_strategies(posts, key, fields="body")
+
+    def test_profile_lsh_strategies_writes_csv(self, spark, tmp_path: Path) -> None:
+        from src.verification.buckets import profile_lsh_strategies
+
+        posts = spark.createDataFrame(
+            [
+                (1, 100, "python list sort", "", "python", "python"),
+                (2, 200, "python list sort", "", "python", "python"),
+                (3, 300, "django postgres", "", "python", "python"),
+            ],
+            ["post_id", "created", "title", "body", "tags", "group"],
+        )
+        out_csv = tmp_path / "bucket_profile.csv"
+        rows = profile_lsh_strategies(
+            posts,
+            strategies=("none", "drop_common_shingles"),
+            bucket_limit=1,
+            num_perm=16,
+            bands=4,
+            rows_per_band=4,
+            output_path=out_csv,
+        )
+        assert len(rows) == 2
+        assert out_csv.exists()
+        assert rows[0]["strategy"] == "none"
+        assert rows[0]["buckets_over_limit"] >= 1
