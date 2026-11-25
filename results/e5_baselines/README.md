@@ -28,3 +28,17 @@ processes, benchmark input rows were loaded into Spark's JVM `LocalRelation`;
 this changes data transfer only, not either engine's Spark SQL plan. Timings
 are local Windows results and include the Spark actions needed to produce and
 count each result.
+
+## How to read these timings
+
+- The numbers in the table above and in `runs.csv` were recorded on Windows before the benchmark was
+  committed. Their clock covered counting the pairs **and** writing them from an uncached result, so the
+  join may have run twice. The digests in that file also come from code that was not committed.
+- `python -m src.baselines.benchmark` now reproduces the experiment: it builds the nested samples,
+  times one materialisation per engine and fails if the engines disagree. Its timings are not
+  comparable with the old ones; rerun it and replace this table and `runs.csv` together.
+- The `sparse_blocks` block id is only a label: both engines do the full join, and `spark_join` was
+  the faster one at 50,000 questions in the recorded run.
+- The threshold is 0.1, which keeps 98.8 million pairs at 50,000 questions. That is far below the
+  operating point of the project's LSH (about 0.42 for b=32, r=4), so these candidate counts are not
+  comparable with LSH candidate counts. The shared-sample comparison with LSH is a separate step.

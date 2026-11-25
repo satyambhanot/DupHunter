@@ -1,7 +1,9 @@
 """Compute exact Jaccard pairs for the E5 baseline.
 
 The sparse-block engine joins inverted shingle postings and aggregates their
-overlap. The Spark-join engine compares each pair of question arrays directly.
+overlap. Its block ids are only labels on the result rows: the posting join is
+the full one, so ``block_size`` does not reduce memory, shuffle or work. The
+Spark-join engine compares each pair of question arrays directly.
 Both return Contract C4 rows, with the exact Jaccard score in ``est_sim``.
 """
 
@@ -152,8 +154,9 @@ def exact_jaccard_pairs(
         threshold: Minimum exact Jaccard similarity, inclusive, from 0 to 1.
         engine: ``"blocks"`` (or ``"sparse_blocks"``) joins inverted postings;
             ``"join"`` (or ``"spark_join"``) compares question arrays directly.
-        block_size: Positive question-ID range used to organize pairs with the
-            sparse-block engine. Changing it does not change the pairs or scores.
+        block_size: Positive question-ID range used to label pairs in the
+            sparse-block engine. It does not split the join, so it changes neither
+            the result nor the amount of work.
 
     Returns:
         A DataFrame matching Contract C4: ``dup_id`` (newer question),
@@ -270,16 +273,17 @@ def main(argv: list[str] | None = None) -> int:
             posts = posts.orderBy("post_id").limit(args.sample_size)
         sample_size = posts.count()
 
+        # Timed: one materialisation of the pairs. Writing them reuses the cache, after the clock.
         started = time.perf_counter()
         pairs = exact_jaccard_pairs(
             posts,
             threshold=args.threshold,
             engine=args.engine,
             block_size=args.block_size,
-        )
+        ).cache()
         n_candidates = pairs.count()
-        pairs.write.mode("overwrite").parquet(args.output)
         elapsed_ms = round((time.perf_counter() - started) * 1000)
+        pairs.write.mode("overwrite").parquet(args.output)
         print(
             f"{args.engine}: {sample_size:,} questions, {n_candidates:,} pairs, {elapsed_ms:,} ms"
         )
