@@ -8,9 +8,10 @@ differences between rows come from the methods, not from the data.
 The sample is ``--pairs`` labelled pairs (both questions of each) plus ``--extra`` other
 questions, chosen by a hash of the seed and the ids, so it does not depend on row order.
 
-For every method the table has the candidate count, Recall@10 and MAP against the labels, the
-share of labelled pairs that are candidates at any rank, and for each ``--levels`` value the share
-of the exact pairs with at least that Jaccard similarity that the method also returns. ``time_s``
+For every method the table has the candidate count, Recall@10, Precision@10 and MAP against the
+labels, the share of labelled pairs that are candidates at any rank, and for each ``--levels``
+value the share of the exact pairs with at least that Jaccard similarity that the method also
+returns. ``time_s``
 is one materialisation of the method's candidates; for Spark it includes building the vectors and
 fitting the model, and for ours it excludes the MinHash signatures, timed in the notes.
 """
@@ -155,6 +156,7 @@ def compare_methods(
             "setting": setting,
             "n_candidates": n_candidates,
             "recall@10": round(float(metrics["recall@10"]), 4),
+            "precision@10": round(float(metrics["precision@10"]), 4),
             "map": round(float(metrics["map"]), 4),
             "labelled_pairs_found": round(_found_share(pairs, labelled), 4),
         }

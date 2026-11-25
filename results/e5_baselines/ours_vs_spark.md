@@ -11,15 +11,19 @@ python -m src.baselines.compare --posts data/parquet/superuser/posts_text \
     --answer-key data/answer_key/superuser --out results/e5_baselines
 ```
 
-| Method | Setting | Candidates | Recall@10 | Exact pairs found, J ≥ 0.2 | J ≥ 0.4 | J ≥ 0.6 | Time (s) |
-|---|---|---:|---:|---:|---:|---:|---:|
-| Exact search | J ≥ 0.1 | 3,671,388 | 0.351 | 100% | 100% | 100% | 19.6 |
-| Our LSH | b=64, r=2 | 3,660,207 | 0.338 | 92.8% | 100% | 100% | 47.5 |
-| Our LSH | b=32, r=4 | 78,091 | 0.116 | 10.9% | 69.0% | 100% | 30.6 |
-| Our LSH | b=16, r=8 | 146 | 0.024 | 0.1% | 4.9% | 61.6% | 20.3 |
-| Spark MinHashLSH | 3 tables, J ≥ 0.6 | 97 | 0.024 | 0.0% | 5.0% | 98.0% | 32.8 |
-| Spark MinHashLSH | 5 tables, J ≥ 0.6 | 99 | 0.024 | 0.0% | 5.1% | 100% | 19.1 |
-| Spark MinHashLSH | 10 tables, J ≥ 0.6 | 99 | 0.024 | 0.0% | 5.1% | 100% | 28.1 |
+| Method | Setting | Candidates | Recall@10 | Precision@10 | Exact pairs found, J ≥ 0.2 | J ≥ 0.4 | J ≥ 0.6 | Time (s) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Exact search | J ≥ 0.1 | 3,671,388 | 0.351 | 0.0368 | 100% | 100% | 100% | 31.1 |
+| Our LSH | b=64, r=2 | 3,660,207 | 0.338 | 0.0352 | 92.8% | 100% | 100% | 159.0 |
+| Our LSH | b=32, r=4 | 78,091 | 0.116 | 0.0122 | 10.9% | 69.0% | 100% | 56.0 |
+| Our LSH | b=16, r=8 | 146 | 0.024 | 0.0025 | 0.1% | 4.9% | 61.6% | 28.5 |
+| Spark MinHashLSH | 3 tables, J ≥ 0.6 | 97 | 0.024 | 0.0025 | 0.0% | 5.0% | 98.0% | 14.3 |
+| Spark MinHashLSH | 5 tables, J ≥ 0.6 | 99 | 0.024 | 0.0026 | 0.0% | 5.1% | 100% | 22.0 |
+| Spark MinHashLSH | 10 tables, J ≥ 0.6 | 99 | 0.024 | 0.0026 | 0.0% | 5.1% | 100% | 129.4 |
+
+Precision@10 divides by 10 even when a question has fewer candidates, and most questions have only one
+labelled original, so it stays small for every method. It is also a lower bound, because not every
+true duplicate is labelled.
 
 What the table shows:
 
@@ -35,9 +39,23 @@ What the table shows:
   LSH being worse. `b=16, r=8` is the closest of our settings in candidate count, and it finds fewer of
   the J ≥ 0.6 pairs (61.6%).
 
-Limits: one sample of one site, one seed, one run per method on a laptop (4 local cores), so the times
-only show rough order. Exact search is bounded below at J = 0.1. The exact engine used is the direct
-Spark join.
+### OR-only (Spark) vs. AND-OR (ours)
+
+- **Spark uses one hash per table (OR only).** Two questions meet if they collide in any of the `L`
+  tables, which for Jaccard similarity `s` happens with probability about `1 - (1 - s)^L`.
+  `approxSimilarityJoin` then computes the Jaccard distance of each pair that met and keeps only those
+  inside the cutoff. More tables raise the chance of meeting, but cannot return a pair below the cutoff.
+- **Ours requires all `r` values of a band to match (AND), in any of `b` bands (OR).** The probability
+  is about `1 - (1 - s^r)^b`. We do not filter by exact similarity afterwards, so `b` and `r` alone set
+  how many candidates come out: a larger `r` removes weak pairs and a larger `b` keeps more of them.
+- So Spark's table count has no matching `(b, r)` setting. In this run, 5 and 10 tables returned the
+  same number of pairs and already found every exact pair with J ≥ 0.6.
+
+Limits: one sample of one site, one seed, on a laptop (4 local cores). **Do not rank the methods by
+these times.** An earlier run of the same command gave the same candidates, Recall@10 and MAP, but its
+times differed by up to 4.6 times (Spark with 10 tables: 28.1 s then, 129.4 s now). `b=64, r=2` took
+longer than exact search in both runs. Exact search is bounded below at J = 0.1. The exact engine used
+is the direct Spark join.
 
 ## Earlier run (superseded)
 

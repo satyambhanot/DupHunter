@@ -59,6 +59,7 @@ def test_every_method_is_scored_on_the_same_sample(spark, tmp_path):
     assert [r["method"] for r in rows] == ["exact"] + ["our_lsh"] * 3 + ["spark_minhash"] * 3
     exact = rows[0]
     assert float(exact["recall@10"]) == 1.0  # both labelled pairs share words
+    assert float(exact["precision@10"]) == pytest.approx(0.1)  # one original in ten places
     assert float(exact["labelled_pairs_found"]) == 1.0
     assert float(exact["exact_pairs_found_J>=0.6"]) == 1.0
     for row in rows:
