@@ -1,8 +1,9 @@
-# WS1 slide pack: problem, dataset, preparation, experimental design
+# WS1 slide pack: problem, dataset, preparation, experimental design, error analysis and speedup
 
 Presenter: Satyam Bhanot. Content for the deck that WS2 assembles (issue #23). One slide per `##` heading:
 at most 5 bullets, a figure line (`—` when there is none) and speaker notes. Numbers come from
-`results/dataset_stats.md` and `src/etl/README.md`.
+`results/` (`dataset_stats.md`, `e7_buckets/`, `error_analysis/`, `e8_scaling/analysis/`) and
+`src/etl/README.md`.
 
 ## Problem and motivation
 
@@ -31,14 +32,14 @@ Notes: Q1 to Q3 must be finished; Q4 is the first thing we cut if time runs shor
 ## Dataset
 
 - Stack Exchange data dump, release 2026-09-30 (Internet Archive, CC BY-SA 4.0).
-- Target: Stack Overflow, python questions (the archive alone is 68.9 GB).
+- Target: Stack Overflow python questions: 2,204,200, with 102,878 labelled pairs (archive 68.9 GB).
 - Development: Super User, 516,669 questions and 753,503 answers, 2008 to 2026.
 - 14,641 duplicate links marked by moderators; 35.4% of questions contain code.
 
 Figure: results/dataset/questions_per_year.png
 
 Notes: Super User is small enough for a laptop and has the same format, so every script is tested there
-first. The Stack Overflow numbers come from the cluster run (issue #3) and are added before the freeze.
+first. Totals for all of Stack Overflow need the dataset profile run (issue #6), which is not in yet.
 
 ## Data preparation
 
@@ -65,11 +66,38 @@ Notes: Say the lower bound out loud; it is the first question a grader asks abou
 ## Experimental design
 
 - Metrics: Recall@1, @5, @10, Precision@10, MAP, NDCG@10 and the reduction ratio.
-- Baselines: exact all-pairs search on samples of 10,000 to 100,000 questions, and Spark's MinHashLSH.
+- Baselines: exact search timed on 10,000 and 50,000 questions; exact, our LSH and Spark on 9,650.
 - Every run adds one row to results/metrics.csv with its settings; settings live in configs/.
 - Cluster: two laptops (Intel i7-13650HX and AMD Ryzen 7 5800H, 16 GB each), Spark 3.5.3, HDFS.
 
 Figure: —
 
-Notes: The exact search also gives the true similarity of every pair, which lets E3 compare the measured
-S-curve with the theoretical one.
+Notes: Both baseline samples are from Super User. E3 compares the measured S-curve with the theoretical
+one on labelled and random pairs.
+
+## Where duplicates are missed
+
+- Python subset, b=32, r=4: Recall@10 is 3.8% per question and 3.6% per labelled pair.
+- 91.7% of the 102,878 labelled pairs never become candidates.
+- 96.2% of the pairs missed at rank 10 have title similarity below 0.38, the 50% point of LSH.
+- Theory without a bucket limit expects 9.4% of pairs as candidates; the run has 8.3%.
+- Ranking matters too: at similarity 0.4 to 0.6, 61.8% reach the top 100 but 35.9% the top 10.
+
+Figure: results/error_analysis/recall_by_similarity.png
+
+Notes: The red line is the chance of becoming a candidate; the bars need a top-10 place, so the gap is not
+all lost candidates. The 1.1 points between 9.4% and 8.3% are an estimate, not a measurement of the bucket
+limit. If asked about 0.42: that is the usual approximate threshold, where the chance is already 64%.
+
+## Speedup on two laptops
+
+- 25% of the python subset, medians of three runs.
+- Ryzen laptop, local files: speedup 1.69, 2.92 and 3.47 on 2, 4 and 8 cores.
+- Efficiency falls from 84% to 43%; three stages take 88% to 92% of the run time.
+- Two laptops, 8 cores each: 960 s, against 1,932 s for the Intel laptop alone (both on HDFS).
+- From 4 to 8 cores per laptop is only 1.20 times faster; data-size scaling is not measured.
+
+Figure: results/e8_scaling/analysis/speedup_cores.png
+
+Notes: The Amdahl serial share of 0.16 is a rough summary of all overheads. Do not compare the Ryzen
+laptop's local-file time with the HDFS runs to judge the second machine.
