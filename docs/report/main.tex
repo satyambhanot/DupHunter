@@ -6,7 +6,7 @@
 \input{ws1_intro_data_eval}
 \input{ws2_method_similarity}
 \IfFileExists{ws3_method_verification.tex}{\input{ws3_method_verification}}{}
-\IfFileExists{ws4_system_scale.tex}{\input{ws4_system_scale}}{}
+\IfFileExists{ws4_system_scaling.tex}{\input{ws4_system_scaling}}{}
 
 \title{DupHunter: Scalable Near-Duplicate Question Detection on Stack Overflow with Spark MinHash-LSH}
 \author{ENSF 612 Project Team (WS1--WS4)}
@@ -17,10 +17,19 @@
 
 % Section 1: Abstract
 \begin{abstract}
-We present DupHunter, an Apache Spark pipeline for near-duplicate question detection on Stack
-Exchange dumps using shingling, MinHash signatures, banded Locality-Sensitive Hashing (LSH), exact
-Jaccard verification, and SON frequent-tagset blocking.
-% TODO(#24): add final headline Recall@10, reduction ratio, and scaling numbers after cluster runs.
+Many Stack Overflow questions repeat earlier ones. We present DupHunter, an Apache Spark system that
+looks for the earlier question using shingles, MinHash signatures and banded locality-sensitive
+hashing (LSH), written by us, and we study exact re-ranking, very large buckets and tag blocking with
+SON. On the 2,204,200 \texttt{python} questions, using title words with 32 bands of 4 rows, it
+% source: results/e7_buckets/bucket_profile.csv; configs/full_run.json
+compares only 0.03\% of all question pairs and reaches a Recall@10 of 3.8\% against the duplicates
+% source: results/metrics.csv
+that moderators labelled. The main limit is the text: 71.3\% of labelled pairs have a title
+similarity below 0.2. On one laptop, 8 cores ran the pipeline on a quarter of the questions 3.47
+% source: results/error_analysis/README.md
+times as fast as one core.
+% source: results/e8_scaling/analysis/README.md
+% TODO(#43): add the data-size result to the abstract, if the test is run.
 \end{abstract}
 
 % Section 2: Introduction (WS1)
@@ -38,8 +47,9 @@ Jaccard verification, and SON frequent-tagset blocking.
 
 % Section 6: System and Cluster Design (WS4)
 \section{System and Cluster Design}
+\ifdefined\wsfourSystem\wsfourSystem\else
 \textbf{TODO:} WS4 architecture, cluster topology, and Spark memory/shuffle configuration.
-% TODO(#42): replace this line with the WS4 fragment.
+\fi
 
 % Section 7: Experimental Design (WS1)
 \wsoneDesign
@@ -47,23 +57,29 @@ Jaccard verification, and SON frequent-tagset blocking.
 % Section 8: Results (WS2 + WS3 + WS4)
 \wstwoResults
 \ifdefined\wsthreeResults\wsthreeResults\fi
-% TODO(#42): insert E8 cluster results tables and figures.
+\ifdefined\wsfourResults\wsfourResults\fi
+\wsoneResults
 
 % Section 9: Analysis and Discussion (WS2 + WS3 + WS4)
 \wstwoAnalysis
 \ifdefined\wsthreeAnalysis\wsthreeAnalysis\fi
-% TODO(#42): insert WS4 scaling analysis.
+\ifdefined\wsfourAnalysis\wsfourAnalysis\fi
+\wsoneAnalysis
 
 % Section 10: Limitations, Scope Changes, and Conclusion
 \section{Limitations, Scope Changes, and Conclusion}
+\ifdefined\wsfourConclusion\wsfourConclusion\else
 \textbf{TODO:} summarize scope changes (AI impact and streaming dropped, checkpoint cuts) and conclusions.
-% TODO(#24): replace this line with the final text.
+\fi
 
 % Section 11: Individual Contributions
+\section{Individual Contributions}
+\paragraph{Satyam Bhanot (WS1: Data Foundation and Evaluation).}
 \wsoneContribution
+\paragraph{Iesrat Jahan (WS2: Similarity Engine).}
 \wstwoContribution
 \ifdefined\wsthreeContribution\wsthreeContribution\fi
-% TODO(#42): add the WS4 individual contribution paragraph.
+\ifdefined\wsfourContribution\wsfourContribution\fi
 
 \bibliographystyle{plain}
 \bibliography{refs}
