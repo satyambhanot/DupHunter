@@ -64,12 +64,12 @@ carry the \texttt{python} tag.
 \paragraph{Preparation.} Our ETL streams the posts and links XML out of the archive without unpacking
 it, with constant memory, into three Parquet tables by year: posts without text, question text and
 post links. The whole Super User archive takes 51 seconds and gives 1,270,172 posts.
-% source: src/etl/README.md (Results on Super User); manifest of the run
+% source: results/dataset/superuser_etl/manifest_posts.json
 HTML is removed later, so that E1 can compare ways of cutting the text.
 
 \paragraph{Ground truth.} The answer key is the set of duplicate links whose two questions are both
 in the data, with the newer question first. On Super User the 14,641 duplicate links give 14,639 pairs:
-% source: src/etl/README.md (Results on Super User)
+% source: results/dataset/superuser_etl/ (manifest_links.json, answer_key_counts.json)
 849 links (5.8\%) pointed from the older to the newer question and were turned around, and one link
 between questions with the same timestamp was dropped; none referred to a missing question.
 
@@ -103,9 +103,9 @@ event logs give run and stage times, shuffle volume, peak memory and slowest and
 \paragraph{Hardware and software.} Development and tests run in Spark local mode on Super User on two
 lighter laptops. Full-scale runs use two laptops as a standalone Spark cluster with HDFS (replication 2)
 under WSL2: an Intel Core i7-13650HX with 16~GB (master, NameNode, worker) and an AMD Ryzen 7 5800H with
-% source: docs/team/jubayerkhan.md; docs/cluster_setup.md; README.md (team table)
+% source: results/core_pipeline_summary.md (Cluster Environment); docs/cluster_setup.md
 16~GB (worker, DataNode). Software: Python 3.10 or newer, Spark 3.5.3 on Java 17, Hadoop 3.3, PyArrow
-% source: requirements.txt (pyspark==3.5.3); README.md (Getting started)
+% source: requirements.txt; README.md (Getting started); results/core_pipeline_summary.md (cluster Spark, Hadoop)
 for Parquet, and \texttt{7z} for the archive.
 }
 
