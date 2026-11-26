@@ -11,7 +11,7 @@ repository shows them; the others are marked *not decided*.
 | [x] | Core run | Full python subset, 10% and 100%, both LSH settings: [core_pipeline_summary.md](../results/core_pipeline_summary.md), [metrics.csv](../results/metrics.csv) (#31) |
 | [x] | E1, text representation | [e1_representation](../results/e1_representation/README.md), Super User |
 | [x] | E2, signature length | [e2_signature](../results/e2_signature/README.md), Super User |
-| [ ] | E3, LSH settings | Done on Super User: [e3_lsh_real](../results/e3_lsh_real/README.md). **Open:** the python sample that #13 also asks for |
+| [x] | E3, LSH settings | [e3_lsh_real](../results/e3_lsh_real/README.md) (Super User) and [e3_lsh_stackoverflow](../results/e3_lsh_stackoverflow/README.md) (Stack Overflow python sample); b = 32, r = 4 confirmed (#13) |
 | [x] | E4 core, ranking of candidates | [e4_verification](../results/e4_verification/README.md) |
 | [x] | Metrics | [src/evaluation](../src/evaluation/README.md); the four core runs are in [metrics.csv](../results/metrics.csv) |
 | [x] | Spark baseline | [ours_vs_spark.md](../results/e5_baselines/ours_vs_spark.md), one shared Super User sample (#11) |
@@ -31,4 +31,3 @@ repository shows them; the others are marked *not decided*.
 
 1. Decide the two items marked *not decided*, with a reason for each.
 2. Close each cut issue as *not planned* with that reason (#43 only if both of its parts are cut).
-3. Tick E3 when the python-sample result is in, or record why it will not be.

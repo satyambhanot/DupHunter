@@ -132,8 +132,8 @@ reaches Recall@10 3.8\% while ruling out 99.97\% of all pairs; on the Super User
 about a third of exact search's recall.
 % source: results/metrics.csv; results/e5_baselines/shared_sample.csv
 \emph{Theory:} the spread of our MinHash estimates is within about 10\% of the formula, and measured
-LSH curves differ from the theory by 1 to 3 points on average (Super User).
-% source: results/e2_signature/README.md; results/e3_lsh_real/README.md
+LSH curves differ from the theory by 1 to 3 points on average (Super User and a Stack Overflow sample).
+% source: results/e2_signature/README.md; results/e3_lsh_real/README.md; results/e3_lsh_stackoverflow/tradeoff.csv
 \emph{Scale:} without a limit, 659 of 46.4 million buckets would hold 89.9\% of all bucket pairs;
 on a quarter of the subset, 8 cores on one laptop gave a speedup of 3.47, and two laptops reading HDFS were 2.01 times as fast as
 the Intel laptop alone. How run time grows with data size is still open.
