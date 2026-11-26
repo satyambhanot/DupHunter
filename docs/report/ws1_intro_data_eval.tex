@@ -41,11 +41,12 @@ evaluation against moderators' duplicate labels, and a study of scale on a two-l
 \paragraph{Source.} We use the Stack Exchange data dump, release 2026-09-30, from the Internet
 Archive (licence CC BY-SA 4.0). Stack Overflow is the target: its archive is 68,929,051,847 bytes
 % source: scripts/cluster/verify_archive.py (EXPECTED_ARCHIVE_SIZE)
-and we keep the questions tagged \texttt{python}. The cluster runs search 2,204,200 such questions,
-% source: results/e7_buckets/README.md; results/e7_buckets/bucket_profile.csv (total_items / 32 bands)
-with 102,878 labelled duplicate pairs among them.
+with 24,133,975 questions, 36,100,225 answers and 753,625 duplicate links. We keep the 2,204,200
+% source: results/dataset_stats.md (Stack Overflow: Questions, Answers, Duplicate links, python questions)
+questions tagged \texttt{python}, with 102,878 labelled duplicate pairs among them. Of these
 % source: results/e7_buckets/bucket_comparison.csv (total_answer_pairs)
-% TODO(#6): questions, answers and posts of all of Stack Overflow, from results/dataset_stats.md
+questions, 89.7\% contain code, bodies average 1,590 characters and none is empty.
+% source: results/dataset_stats.md (Stack Overflow: Bodies with code, Mean body length, Empty bodies)
 Super User, a small site in the same format, is used for development on the two lighter laptops.
 
 \paragraph{Super User.} The site has 516,669 questions and 753,503 answers, asked from 2008 to 2026

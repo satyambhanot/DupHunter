@@ -32,14 +32,15 @@ Notes: Q1 to Q3 must be finished; Q4 is the first thing we cut if time runs shor
 ## Dataset
 
 - Stack Exchange data dump, release 2026-09-30 (Internet Archive, CC BY-SA 4.0).
-- Target: Stack Overflow python questions: 2,204,200, with 102,878 labelled pairs (archive 68.9 GB).
+- All of Stack Overflow: 24,133,975 questions, 36,100,225 answers, 753,625 duplicate links (68.9 GB).
+- Target: its 2,204,200 python questions, with 102,878 labelled pairs; 89.7% contain code.
 - Development: Super User, 516,669 questions and 753,503 answers, 2008 to 2026.
-- 14,641 duplicate links marked by moderators; 35.4% of questions contain code.
+- Super User has 14,641 duplicate links; 35.4% of its questions contain code.
 
 Figure: results/dataset/questions_per_year.png
 
 Notes: Super User is small enough for a laptop and has the same format, so every script is tested there
-first. Totals for all of Stack Overflow need the dataset profile run (issue #6), which is not in yet.
+first. Body statistics for Stack Overflow cover the python questions only, because only their text is kept.
 
 ## Data preparation
 
