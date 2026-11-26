@@ -2,8 +2,8 @@
 
 Presenter: Satyam Bhanot. Content for the deck that WS2 assembles (issue #23). One slide per `##` heading:
 at most 5 bullets, a figure line (`—` when there is none) and speaker notes. Numbers come from
-`results/` (`dataset_stats.md`, `e7_buckets/`, `error_analysis/`, `e8_scaling/analysis/`) and
-`src/etl/README.md`.
+`results/` (`dataset_stats.md`, `e7_buckets/`, `error_analysis/`, `e8_scaling/analysis/`,
+`dataset/superuser_etl/`).
 
 ## Problem and motivation
 
@@ -27,7 +27,7 @@ answers it. Then the cost problem: n questions give n(n-1)/2 pairs.
 
 Figure: —
 
-Notes: Q1 to Q3 must be finished; Q4 is the first thing we cut if time runs short (decided at the checkpoint).
+Notes: Q1 to Q3 must be finished. Q4 is secondary and last in the proposal's cut order; we completed it.
 
 ## Dataset
 
