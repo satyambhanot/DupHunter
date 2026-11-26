@@ -1,0 +1,17 @@
+% Builds the WS1 report fragment on its own, to check its length and that it compiles.
+% From the repository root:  cd docs/report/standalone && tectonic ws1.tex
+\documentclass[11pt,twocolumn]{article}
+\usepackage{amsmath,amssymb,booktabs,cite,graphicx,hyperref}
+\graphicspath{{../../../}}
+\input{../ws1_intro_data_eval}
+\begin{document}
+\wsoneIntro
+\wsoneDataset
+\wsoneDesign
+\section{Results}
+\wsoneResults
+\section{Analysis}
+\wsoneAnalysis
+\paragraph{Individual contribution.}
+\wsoneContribution
+\end{document}
