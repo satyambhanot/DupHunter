@@ -60,11 +60,11 @@ and `spark-submit src/etl/parse_posts.py` cannot import `src`. The ETL does not 
 Run after the ETL, on the same Parquet root (`--master` selects Spark; the default is `local[*]`):
 
 ```bash
-python -m src.etl.profile --parquet-root data/parquet/superuser --site superuser \
+python -m src.etl.profile --parquet-root data/parquet/superuser --site "Super User" \
     --output results/dataset_stats.md
 python -m src.etl.answer_key --parquet-root data/parquet/superuser --output data/answer_key/superuser
 python -m src.etl.exports --parquet-root data/parquet/superuser \
-    --answer-key data/answer_key/superuser --output data/exports/superuser
+    --answer-key data/answer_key/superuser --output data/exports/superuser --tag ""
 ```
 
 - `profile.py` writes one section per site into `results/dataset_stats.md` (questions, answers, `python`
@@ -74,8 +74,8 @@ python -m src.etl.exports --parquet-root data/parquet/superuser \
   questions are in `posts_text`, newer question first. Links with a missing question or equal timestamps are
   dropped; the counts are printed.
 - `exports.py` writes `python_tags`, `python_sample` and `pairs_e1` (deterministic, seed and sizes in
-  `configs/sample.json`). Super User has only 3,212 `python` questions, too few for the exports, so for
-  development there add `--tag ""` to use all questions. Share the files on the team drive; never commit them.
+  `configs/sample.json`). Super User has only 3,212 `python` questions, too few for the exports, so the
+  command above passes `--tag ""` to use all questions; leave it out on Stack Overflow. Share the files on the team drive; never commit them.
 
 ## Results on Super User (release 2026-09-30)
 
