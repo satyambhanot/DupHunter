@@ -48,5 +48,5 @@
   - **$b=32, r=4$:** Threshold $t \approx 0.420$ (**Selected Pipeline Baseline**: 73,889 candidates, 99.8% reduction ratio, Recall@10 = 11.5%, 15\,s)
   - $b=64, r=2$: Threshold $t \approx 0.125$ (High-recall benchmark: 3.89M candidates, 91.5% reduction ratio, Recall@10 = 29.8%, 50\,s)
 - **Validation:** Measured collision rates follow the theoretical S-curve: mean absolute difference 0.9 to 3.1 points per setting, up to 10 points in single bins of 40 to 85 pairs.
-- **Key Insight:** Duplicates share few words (only 8.9% reach Jaccard 0.4), so recall at any threshold is low; lowering the threshold buys recall at a steep candidate cost. An exact-search recall at the same cutoffs is not measured yet.
+- **Key Insight:** Duplicates share few words (only 8.9% reach Jaccard 0.4), so recall at any threshold is low; lowering the threshold buys recall at a steep candidate cost. On a separate shared sample of 9,650 questions, exact search at J ≥ 0.1 reaches Recall@10 35.1% (E5); recall at the other cutoffs is not measured.
 - **Figure:** Predicted vs. Measured S-Curves (`% source: results/e3_lsh_real/s_curves.png`)

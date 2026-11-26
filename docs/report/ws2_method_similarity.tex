@@ -36,7 +36,7 @@ oversized buckets and topic blocking; the library is used only as a baseline (E5
 }
 
 \newcommand{\wstwoMethodology}{%
-\section{Similarity Engine Methodology}
+\section{Method}
 
 Question text (Contract C1) becomes candidate pairs (Contract C4) in three stages: shingling, MinHash, LSH banding.
 
@@ -58,9 +58,9 @@ MinHash maps a shingle set $S$ to a signature of $n$ integers, using $n$ univers
 \end{equation}
 where $p = 2^{31}-1$ is prime and $a_i, b_i$ are drawn from $[1, p-1]$ with a fixed seed (42), so that a shorter
 signature is the exact prefix of a longer one.
+% source: src/similarity/minhash.py (PRIME, MinHashConfig, _hash_coefficients)
 
 Component $i$ of the signature is $h_{\min, i}(S) = \min_{x \in S} h_i(x)$ (an empty set gets $p$), and
-
 the probability that two components agree equals the Jaccard similarity:
 \begin{equation}
   P\bigl(h_{\min, i}(A) = h_{\min, i}(B)\bigr) = J(A, B) = \frac{|A \cap B|}{|A \cup B|}
@@ -69,9 +69,9 @@ The share of equal components is an unbiased estimate $\hat{J}$ with standard de
 
 \paragraph{Locality-sensitive hashing banding (Stage C3 $\to$ C4).}
 To avoid comparing all pairs of questions, the signature is divided into $b$ bands of $r$ rows ($n = b \cdot r$).
-In band $j$ the $r$ values are turned into a bucket key (a SHA-1 digest of the band index and the values):
+In band $j$ the bucket key is the topic group, the band index and a SHA-1 digest of the band's $r$ values:
 \begin{equation}
-  \text{bucket}_j = \text{SHA1}\bigl(j, h_{j \cdot r + 1}, \dots, h_{(j+1) \cdot r}\bigr)
+  \text{bucket}_j = \Bigl(g,\; j,\; \text{SHA1}\bigl(h_{j \cdot r + 1}, \dots, h_{(j+1) \cdot r}\bigr)\Bigr)
 \end{equation}
 Two questions are candidates if they share a bucket in at least one band, which for similarity $s$ happens with
 probability (the $S$-curve)
@@ -84,16 +84,15 @@ The curve rises steeply near the threshold
 \end{equation}
 
 \paragraph{Distributed candidate generation and plug-in hooks.}
-Signatures are grouped by (band, bucket key) and each bucket is joined with itself. Two hooks keep this from
+Signatures are grouped by (band, bucket key) and the pairs inside each bucket are listed. Two hooks keep this from
 exploding on popular buckets: \texttt{--bucket-policy} drops or limits buckets above a size (e.g.\ $|B| > 1{,}000$; E7), and
 \texttt{--groups} prefixes the keys with a topic group, so questions of different groups never meet (E6).
 Candidates follow Contract C4: \texttt{dup\_id} (the newer question), \texttt{cand\_id} and \texttt{est\_sim}.
 }
 
 \newcommand{\wstwoResults}{%
-\section{Similarity Engine Results (E1, E2, E3)}
-
-Each design choice was settled on the Super User data.
+\section{Results}
+\subsection{Similarity Engine (E1, E2, E3)}
 
 \begin{figure*}[!t]
 \centering
@@ -107,6 +106,7 @@ Each design choice was settled on the Super User data.
 \paragraph{Experiment E1: Text representation (shingles).}
 Experiment E1 evaluated 14 representation options on the \texttt{pairs\_e1} benchmark (2,000 labelled
 duplicate pairs and 2,000 random non-duplicate pairs) using exact Jaccard similarity.
+% source: results/e1_representation/README.md; configs/e1_representation.json
 Table~\ref{tab:e1_representation} summarizes the key configurations.
 
 \begin{table*}[!t]
@@ -133,9 +133,10 @@ Word 1-grams of title and body with 5\% common shingles dropped separate best (A
 pairs reach $J \ge 0.2$. \textbf{Word 1-grams of the title} keep more duplicates above practical thresholds
 (35.2\% at $J \ge 0.2$, 8.9\% at $J \ge 0.4$) with only 9.6 shingles per question, and random pairs share no title word
 (median 0). We use them in E2 and E3.
+% source: results/e1_representation/options.csv
 
 \paragraph{Experiment E2: MinHash signature length.}
-E2 tested signature lengths $n \in \{32, 64, 128, 256\}$ across 1,000 duplicate pairs,
+E2 tested signature lengths $n \in \{32, 64, 128, 256\}$ on 1,000 Super User duplicate pairs,
 1,000 random pairs, and 1,800 synthetic set pairs spanning similarities $J \in [0.1, 0.9]$.
 The empirical estimation error closely tracked the theoretical bound $\sqrt{J(1-J)/n}$:
 at $J = 0.5$, the measured standard error was 0.093 for $n=32$ (theory 0.088), 0.065 for $n=64$
@@ -143,13 +144,13 @@ at $J = 0.5$, the measured standard error was 0.093 for $n=32$ (theory 0.088), 0
 (theory 0.063), 0.049 for $n=128$ (theory 0.044), and 0.031 for $n=256$ (theory 0.031).
 The bias was below 0.016 in every configuration.
 
-Signing 5,000 questions took 0.4 to 0.6\,s for every $n$ (a single core), and the signatures take 5.1\,MB at $n=128$ (1\,KB per question)
+Signing 5,000 questions took 0.4 to 0.6\,s for every $n$ (a single core), and the signatures take 5.1\,MB at $n=128$ (1\,KB per question).
 % source: results/e2_signature/cost.csv
-. We chose $n=128$: error under 0.05 at $J=0.5$ and many factorizations $b \cdot r = 128$.
+We chose $n=128$: error under 0.05 at $J=0.5$ and many factorizations $b \cdot r = 128$.
 
 \paragraph{Experiment E3: LSH band/row setting trade-offs.}
-Experiment E3 evaluated three $(b, r)$ settings on 9,583 Super User questions containing 2,007 labelled
-duplicate pairs (bucket limit 1,000):
+Experiment E3 evaluated three $(b, r)$ settings on 9,583 Super User questions, 2,007 of which have a
+labelled original in the sample (bucket limit 1,000):
 \begin{itemize}
   \item $b = 64, r = 2$ ($t = 0.125$): Emitted 3,892,580 candidate pairs (reduction ratio 0.915),
         % source: results/e3_lsh_real/tradeoff.csv
@@ -165,24 +166,27 @@ We use $b = 32, r = 4$ for the full runs: it keeps 0.2\% of all pairs. $b=64, r=
 }
 
 \newcommand{\wstwoAnalysis}{%
-\section{Similarity Engine Analysis}
+\section{Analysis}
+\subsection{Similarity Engine}
 
 \paragraph{Theoretical vs.\ measured $S$-curves.}
 On 4,000 labelled and random pairs, the share of pairs that collide per bin of exact Jaccard is compared with
 $1 - (1 - s^r)^b$ (Figure~\ref{fig:e3_scurves}).
-
-The mean absolute deviation of measurement from theory is 0.031 for $b=32, r=4$
 % source: results/e3_lsh_real/README.md
-, 0.027 for $b=64, r=2$ and 0.009 for $b=16, r=8$. For $b=32, r=4$ the bin $[0.3, 0.4)$ matches (0.383 against 0.384);
+
+The mean absolute deviation of measurement from theory is 0.031 for $b=32, r=4$,
+% source: results/e3_lsh_real/README.md
+0.027 for $b=64, r=2$ and 0.009 for $b=16, r=8$. For $b=32, r=4$ the bin $[0.3, 0.4)$ matches (0.383 against 0.384);
 above 0.4 it is lower (0.659 against 0.738 at $[0.4, 0.5)$); this may be because the prediction is taken at the bin middle while pairs lie nearer its lower end (40 to 85 pairs per bin).
 
 \paragraph{Vocabulary divergence.}
 Labelled duplicates share few words (35.2\% have title Jaccard $\ge 0.2$, 8.9\% reach $0.4$), so recall is low at every
 threshold: $b=32, r=4$ ($t=0.42$) finds 11.5\% at Recall@10, and $b=64, r=2$ ($t=0.125$) finds 29.8\% with 53 times as many
 candidates. We did not measure an exact-search recall at the same cutoffs, so this is a trade-off, not an upper bound.
+% source: results/e1_representation/options.csv; results/e3_lsh_real/tradeoff.csv
 }
 
 \newcommand{\wstwoContribution}{%
-Iesrat Jahan wrote the similarity engine (Workstream 2): shingling (\texttt{src/similarity/shingles.py}), MinHash from scratch
+Wrote the similarity engine: shingling (\texttt{src/similarity/shingles.py}), MinHash from scratch
 (\texttt{minhash.py}) and banded LSH with the bucket-policy and grouping hooks (\texttt{lsh.py}). % TODO(team): agree who is named for the E1--E3 study scripts before submission
 }
