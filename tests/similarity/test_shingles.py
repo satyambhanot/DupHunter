@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 
 from src.similarity.shingles import (
     SHINGLE_BUILDERS,
@@ -134,3 +135,57 @@ def test_escaped_angle_brackets_do_not_delete_text(spark):
     rows = spark.sql("SELECT 1 AS post_id, '' AS title, 'if a &lt; b then c &gt; d' AS body")
     row = build_shingles(rows, ShingleConfig(k=1)).collect()[0]
     assert len(row.shingles) == 6  # if, a, b, then, c, d
+
+
+def _write_posts(spark: SparkSession, path) -> None:
+    spark.createDataFrame(
+        [
+            (
+                1,
+                "Sort list python",
+                "<p>Use sorted on the list</p><pre><code>sorted(xs)</code></pre>",
+            ),
+            (2, "Sort a list", "<p>Another body entirely</p>"),
+        ],
+        "post_id long, title string, body string",
+    ).write.parquet(str(path))
+
+
+def _shingle_rows(df) -> dict:
+    return {r.post_id: (sorted(r.shingles), sorted(r.code_shingles)) for r in df.collect()}
+
+
+def test_command_line_matches_build_shingles(spark: SparkSession, tmp_path) -> None:
+    from src.similarity.shingles import main
+
+    _write_posts(spark, tmp_path / "posts")
+    argv = ["--posts", str(tmp_path / "posts"), "--out", str(tmp_path / "c2")]
+    argv += ["--representation", "word", "--k", "2"]
+    assert main(argv) == 0
+    expected = build_shingles(spark.read.parquet(str(tmp_path / "posts")), ShingleConfig(k=2))
+    assert _shingle_rows(spark.read.parquet(str(tmp_path / "c2"))) == _shingle_rows(expected)
+
+
+def test_title_only_ignores_the_body(spark: SparkSession, tmp_path) -> None:
+    from src.similarity.shingles import shingles_from_options
+
+    _write_posts(spark, tmp_path / "posts")
+    posts = spark.read.parquet(str(tmp_path / "posts"))
+    config = ShingleConfig(k=1)
+    title_only = _shingle_rows(shingles_from_options(posts, config, fields="title"))
+    blanked = _shingle_rows(build_shingles(posts.withColumn("body", F.lit("")), config))
+    assert title_only == blanked
+    assert len(title_only[1][0]) == 3  # sort, list, python
+    with pytest.raises(ValueError, match="fields"):
+        shingles_from_options(posts, config, fields="body")
+
+
+def test_include_code_adds_the_code_shingles(spark: SparkSession, tmp_path) -> None:
+    from src.similarity.shingles import shingles_from_options
+
+    _write_posts(spark, tmp_path / "posts")
+    posts = spark.read.parquet(str(tmp_path / "posts"))
+    plain = _shingle_rows(shingles_from_options(posts, ShingleConfig(k=1)))
+    merged = _shingle_rows(shingles_from_options(posts, ShingleConfig(k=1), include_code=True))
+    assert set(merged[1][0]) == set(plain[1][0]) | set(plain[1][1])
+    assert len(plain[1][1]) > 0 and merged[2][0] == plain[2][0]  # question 2 has no code

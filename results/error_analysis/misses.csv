@@ -1,0 +1,21 @@
+dup_id,original_id,found,rank,exact_jaccard,tags,body_len,year
+42558,31875,False,,0.0,['python' 'design-patterns' 'singleton'],193,2008
+49146,2933,False,,0.10526315789473684,['python' 'exe' 'executable'],233,2008
+106725,2933,False,,0.08695652173913043,['python' 'windows-installer' 'packaging'],464,2008
+108523,36932,False,,0.3333333333333333,['python' 'enums'],455,2008
+143714,56011,False,,0.15384615384615385,['python' 'string' 'quotes' 'double-quotes'],180,2008
+150743,58119,False,,0.05555555555555555,['python' 'exception'],618,2008
+190967,189861,False,,0.11764705882352941,['python' 'regex'],172,2008
+192109,191010,False,,0.20833333333333334,['python' 'debugging' 'introspection' 'pretty-print' 'python-datamodel'],232,2008
+196876,36932,False,,0.1,['python'],750,2008
+204017,89228,False,,0.3684210526315789,['python' 'shellexecute'],1420,2008
+237079,121025,False,,0.35294117647058826,['python' 'file'],131,2008
+239912,141449,False,,0.16666666666666666,['python' 'string' 'file'],597,2008
+268025,268015,False,,0.06666666666666667,['python' 'installation' 'mysql' 'egg'],263,2008
+269795,247770,False,,0.2,['python' 'module'],280,2008
+270460,15798,False,,0.15384615384615385,['python' 'xml'],243,2008
+276434,25665,False,,0.4444444444444444,['python' 'html' 'apache' 'pdf'],307,2008
+286150,163009,False,,0.0,['python' 'string' 'url' 'split'],491,2008
+286150,258746,False,,0.0,['python' 'string' 'url' 'split'],491,2008
+287085,36901,False,,0.25,['python'],490,2008
+302729,106896,False,,0.13636363636363635,['python' 'oop'],675,2008

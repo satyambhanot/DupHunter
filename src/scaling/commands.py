@@ -6,8 +6,8 @@ Test C: 10%, 25%, 50% and 100% of the python subset on both laptops (``8+8``).
 
 Which laptop runs a single-laptop setting is decided by the master URL: use the master of a cluster
 that has only that laptop's worker. The application must accept ``--fraction`` (share of the
-data), ``--master``, ``--output-root`` and ``--metrics-out``; ``scripts/cluster/stages.py`` does,
-and it also takes ``--setting``.
+data), ``--master``, ``--app-name``, ``--output-root`` and ``--metrics-out``;
+``scripts/cluster/stages.py`` does, and it also takes ``--setting``.
 """
 
 import re
@@ -88,6 +88,8 @@ def build_command(
     ``scripts/parse_eventlogs.py``. ``py_files`` (a zip of ``src``) is shipped to the executors,
     which import ``src.*`` inside Spark tasks. The master is passed on to the application too:
     ``stages.py`` builds its own session, and without it a run would silently use ``local[*]``.
+    The run name is passed on too, because the application's ``appName`` replaces
+    ``spark-submit --name`` and ``parse_eventlogs.py`` identifies runs by that name.
     """
     executor_cores, total_cores = parse_cores(cores)
     name = log_name(test, cores, fraction, run)
@@ -106,6 +108,7 @@ def build_command(
         app,
         "--fraction", format_fraction(fraction),
         "--master", master,
+        "--app-name", name,
         "--output-root", f"{output_root.rstrip('/')}/{name}",
         "--metrics-out", f"{DEFAULT_METRICS_DIR}/{name}.csv",
     ]  # fmt: skip
