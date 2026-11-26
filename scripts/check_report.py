@@ -215,7 +215,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--strict-sources",
         action="store_true",
-        help="Fail if any numeric line lacks a '% source:' or '% TODO' comment.",
+        help="Fail if any numeric line lacks a '%% source:' or '%% TODO' comment.",
     )
     return parser.parse_args(argv)
 

@@ -148,9 +148,10 @@ buckets earlier in Stage C1 $\to$ C2. The two E7 runs are not a like-for-like co
 \texttt{drop\_common\_shingles} ran without a bucket size limit and also changes the shingle sets,
 and no run without any limit was made, so the pairs removed by \texttt{size\_limit} alone are not
 measured. The core and E8 scaling runs use \texttt{size\_limit} alone; combining it with
-\texttt{drop\_common\_shingles} is a candidate that was not run. At the checkpoint, streaming, the
-AI-impact experiments, and the full-scale \texttt{salt\_split} run (\#41) were cut so the cluster
-time went to the core E6 and E7 runs, while E4 TF-IDF re-ranking (\#40) was completed.
+\texttt{drop\_common\_shingles} is a candidate that was not run. At the checkpoint, the full-scale
+\texttt{salt\_split} run (\#41) was cut so the cluster time went to the core E6 and E7 runs, while
+E4 TF-IDF re-ranking (\#40) was completed. The AI-impact study and the streaming check had been
+dropped earlier, when we revised the proposal after feedback.
 
 \paragraph{Tag blocking trade-off.} Blocking by frequent tagsets shrinks candidate comparisons
 within topics, but any duplicate pair whose questions do not share the same assigned group incurs
