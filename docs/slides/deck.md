@@ -20,14 +20,14 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 
 <!-- Presenter: Satyam Bhanot | Allocated Time: 0:00 - 0:50 -->
 ## 1. Problem Formulation: Duplicate Questions on Stack Overflow
-- **Context:** Stack Overflow holds millions of questions; developers keep asking the same thing in different words. [TODO: exact question count after the Stack Overflow profile (#31)]
+- **Context:** Stack Overflow has 24,133,975 questions in this data release, and people keep asking the same thing in different words (`results/dataset_stats.md`).
 - **Why It Matters:** Community fragmentation, redundant expert effort, delayed answers for developers.
 - **The Computational Bottleneck:**
-  - Pairwise comparison across $N = 2{,}200{,}000$ questions requires:
-    $$\frac{N(N-1)}{2} \approx 2.42 \times 10^{12} \text{ comparisons (quadratic explosion)}$$
+  - Pairwise comparison across $N = 2{,}204{,}200$ python questions requires:
+    $$\frac{N(N-1)}{2} \approx 2.43 \times 10^{12} \text{ comparisons (quadratic explosion)}$$
   - At 10,000 comparisons/sec, an exhaustive search needs about **7.7 years of continuous compute**.
-- **Project Objective:** Build a sub-quadratic, distributed candidate generation pipeline on Apache Spark with bounded recall loss.
-- **Figure Citation:** TODO (not yet produced): Quadratic vs. LSH comparison cost (`results/e5_baselines/`)
+- **Project Objective:** Build a sub-quadratic, distributed candidate generation pipeline on Apache Spark that gives up some recall to avoid comparing almost all pairs.
+- **Figure Citation:** Question counts (`results/dataset_stats.md`)
 
 ---
 
@@ -51,8 +51,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - Extracted from `post_links` with `LinkTypeId = 3` (duplicate relationship).
   - Oriented by creation time (`src/etl/answer_key.py`): `dup_id` is the newer question, `original_id` the older one; links whose two questions have the same timestamp are dropped.
 - **Data Observations:**
-  - About $2.6\%$ of Super User questions are labelled duplicates (13,325 of 516,669; `results/dataset_stats.md`). [TODO: share on the python subset (#31)]
-  - Asymmetric relationship: a few original questions attract many duplicates. [TODO: top originals by number of duplicates, from the profile (#31)]
+  - About $2.6\%$ of Super User questions are labelled duplicates (13,325 of 516,669). The 2,204,200 Stack Overflow python questions hold 102,878 labelled pairs (`results/e7_buckets/bucket_comparison.csv`).
   - A link is dropped when either of its questions is missing from the question table (for example deleted).
 - **Figure Citation:** Questions per year (`results/dataset/questions_per_year.png`)
 
@@ -85,7 +84,7 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 
 <!-- Presenter: Iesrat Jahan | Allocated Time: 4:30 - 5:30 -->
 ## 6. Shingling & Text Preprocessing (Experiment E1)
-- **HTML Sanitization:** Strips markup while preserving technical symbols (`_`, operators).
+- **HTML Sanitization:** Strips markup; word shingles keep letters, digits and `_` and split on all other symbols.
 - **Code Block Isolation:**
   - Question bodies frequently combine prose with syntax snippets.
   - Text inside `<code>` and `<pre>` is extracted into a dedicated `code_shingles` stream.
@@ -127,25 +126,26 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
 <!-- Presenter: Navjot Singh Shienh | Allocated Time: 7:30 - 8:30 -->
 ## 9. Big-Bucket Skew & Pruning Policies (Experiment E7)
 - **The Skew Hazard:**
-  - Common programming terms cause thousands of questions to hash to the exact same band bucket.
-  - A bucket with $M = 10{,}000$ posts generates $\frac{10000 \times 9999}{2} \approx 50\text{ million pairs}$ (driver OOM).
-- **The Size-Limit Policy (Contract Hook 1):**
-  - `--bucket-policy size_limit`: Drops buckets where $|B| > 1{,}000$ items and logs the event.
-  - [TODO: result of the E7 bucket comparison, from #30: share of candidate pairs removed and share of true duplicates lost]
-- **Figure Citation:** TODO (not yet produced): Bucket size distribution before and after pruning (`results/e7_buckets/`)
+  - A bucket of $M = 10{,}000$ posts implies about 50 million pairs, which one executor has to build.
+  - Without a limit, 659 of 46.4 million buckets hold 89.9% of all bucket pairs; the largest has 75,810 questions (`results/e7_buckets/bucket_profile.csv`).
+- **The Size-Limit Policy (Contract Hook 1):** `size_limit(1000)` first counts each bucket's size (a shuffle), then drops buckets over 1,000 before any pair is built.
+- **Compared with dropping the most common shingles:** 3,034 s vs. 2,261 s, 740.0M vs. 578.1M candidates, Recall@10 3.8% vs. 4.7%, slowest task 148 s vs. 403 s (`results/e7_buckets/bucket_comparison.csv`).
+- **Caution:** that run had no size limit and also changed the shingles; recall lost only to the limit is not measured.
+- **Figure Citation:** Bucket profile and strategy comparison (`results/e7_buckets/README.md`)
 
 ---
 
 <!-- Presenter: Navjot Singh Shienh | Allocated Time: 8:30 - 9:30 -->
 ## 10. Topic Partitioning & Tag Blocking (Experiment E6)
-- **Concept:** Questions in disjoint technologies (e.g. `pandas` vs. `c++-templates`) never duplicate each other.
+- **Concept:** Compare only questions in the same tag group, assuming duplicates share tags.
 - **Blocking Mechanism (Contract Hook 2):**
   - `--groups`: Maps questions to frequent tag combinations (SON algorithm itemsets) or primary tags.
   - Group identifiers prefix bucket hash keys: items in different groups never collide in buckets.
 - **Empirical Impact:**
-  - [TODO: E6 candidate reduction of tag blocking on the python subset, from #17]
-  - [TODO: E6 Recall@10 and speed-up with blocking, from #17]
-- **Figure Citation:** TODO (not yet produced): Tag blocking candidate reduction (`results/e6_blocking/`)
+  - SON groups: 60% fewer candidates (296.1M vs. 740.0M), only 8% less time (2,881 vs. 3,127 s), Recall@10 down from 3.8% to 2.7%.
+  - Single most frequent tag: 68% fewer candidates, 23% less time, Recall@10 2.4%.
+  - The assumption often fails: SON groups separate 54% of the labelled pairs.
+- **Figure Citation:** Blocking comparison (`results/e6_blocking/blocking_comparison.csv`)
 
 ---
 
@@ -158,68 +158,62 @@ footer: "ENSF 612 Big Data Analytics — Presentation Deck"
   - `estimated`: Rank ordered by MinHash signature overlap.
   - `exact_jaccard`: Re-ranked by exact Jaccard similarity.
   - `tfidf_cosine`: Re-ranked using TF-IDF token weights (stretch).
-- **Results:** Exact Jaccard re-ranking changes the top-1 candidate for 17.7% of queries (top-1 agreement 82.3%, mean rank shift 0.94; `results/e4_verification/ranking_comparison.csv`). [TODO: Recall@K, MAP and NDCG of the rankers, requested on #75]
+- **Results:** Exact Jaccard re-ranking changes the top-1 candidate for 17.7% of queries (top-1 agreement 82.3%, mean rank shift 0.94; `results/e4_verification/ranking_comparison.csv`). On 4,107 Super User queries, Recall@10 stays 11.5% to 11.6% for all rankers; Recall@1 is 8.9% estimated, 8.7% exact Jaccard, 10.0% TF-IDF on titles and 10.5% with bodies (`results/e4_verification/tfidf_comparison.csv`).
 - **Figure Citation:** Ranking strategy comparison (`results/e4_verification/ranking_comparison.csv`)
 
 ---
 
 <!-- Presenter: Md Jubayer Khan | Allocated Time: 10:30 - 11:30 -->
 ## 12. Cluster Topology & Distributed Deployment
-- **Physical Testbed Topology:**
-  - 2 commodity developer laptops on the same local network (see `docs/cluster_setup.md`).
-  - **Node A (Intel i7-13650HX, 14 cores, 16 GB):** HDFS NameNode, Spark Master, Spark Worker (8 cores, 8 GB).
-  - **Node B (AMD Ryzen 7 5800H, 8 cores, 16 GB):** HDFS DataNode, Spark Worker (8 cores, 7 GB; `configs/cluster/laptop_b/`).
-- **Cluster Software Stack:**
-  - Apache Spark 3.5.3 Standalone, Hadoop 3.3 HDFS, OpenJDK 17, Python 3.10+.
-- **Execution Pipeline:** HDFS streamed storage $\to$ distributed shingling $\to$ MinHash $\to$ LSH $\to$ verification.
-- **Figure Citation:** Cluster hardware (`docs/team/`, `configs/cluster/`)
+- **Physical Testbed Topology:** two 16 GB laptops joined by a wired Gigabit link.
+  - **Node A (Intel i7-13650HX):** HDFS NameNode and DataNode, Spark master and worker.
+  - **Node B (AMD Ryzen 7 5800H):** HDFS DataNode and Spark worker.
+  - **Full core run:** 8 cores and 8 GB on A, 4 cores and 5 GB on B, 4 GB per executor.
+- **Cluster Software Stack:** Apache Spark 3.5.3 standalone, Hadoop 3.3.6 HDFS (two copies), Java 17.
+- **Execution Pipeline:** HDFS $\to$ shingles $\to$ MinHash $\to$ LSH $\to$ evaluation, each stage saved.
+- **Figure Citation:** Core run record (`results/core_pipeline_summary.md`)
 
 ---
 
 <!-- Presenter: Md Jubayer Khan | Allocated Time: 11:30 - 12:30 -->
 ## 13. Baseline Comparison: Ours vs. Exact & Spark MLlib (E5)
-- **Benchmark Baselines:**
-  - **Exact All-Pairs:** Pairwise Jaccard on 10k, 50k, and 100k samples.
-  - **Spark MLlib `MinHashLSH`:** Built-in Spark ML library implementation.
-  - **DupHunter:** Our custom MapReduce pipeline.
-- **Comparison Findings:**
-  - [TODO: where exact search stops being feasible, from the E5 run (#10)]
-  - [TODO: observation about Spark `MinHashLSH`, from the E5 run (#11)]
-  - [TODO: DupHunter versus Spark `MinHashLSH` runtime and candidates at equal recall, from E5 (#10, #11)]
-- **Figure Citation:** TODO (not yet produced): Runtime & memory baselines (`results/e5_baselines/ours_vs_spark.md`)
+- **Exact all-pairs (two implementations, same pairs):** 4.9 million pairs at 10k questions, 98.8 million at 50k (355 s for the faster one); 100k was not run.
+- **One shared Super User sample (9,650 questions):**
+  - Exact search ($J \ge 0.1$): Recall@10 35.1%, 3.67M candidates.
+  - Ours, $b=32, r=4$: Recall@10 11.6%, 78,091 candidates (47 times fewer).
+  - Ours, $b=64, r=2$: Recall@10 33.8%, but 3.66M candidates.
+  - Spark `MinHashLSH` ($J \ge 0.6$, 5 tables): 99 candidates, Recall@10 2.4%; its cutoff explains most of the gap.
+- **Not compared:** methods at equal recall, and run times (two runs differed by up to 4.6 times).
+- **Figure Citation:** Exact search run time (`results/e5_baselines/runtime.png`; table `results/e5_baselines/ours_vs_spark.md`)
 
 ---
 
 <!-- Presenter: Md Jubayer Khan | Allocated Time: 12:30 - 13:30 -->
-## 14. Scalability Analysis: Data, Cores, and Nodes (Experiment E8)
-- **Data Scaling (10% to 100% of 2.2M questions):**
-  - Shingling and MinHash scale strictly linearly $O(N)$.
-  - [TODO: scaling exponent from the data-size test, E8 (#43)]
-- **Core Speedup (1, 2, 4, 8, 14 cores):**
-  - [TODO: core-count speed-up and efficiency, E8 (#32)]
-  - [TODO: LSH grouping efficiency, E8 (#32)]
-- **Cluster speed-up:** [TODO: speed-up of two nodes over one laptop, E8 (#32)]
-- **Figure Citation:** TODO (not yet produced): Strong and weak scaling plots (`results/e8_scaling/scaling_results.csv`)
+## 14. Scalability Analysis: Cores, Machines and Data (Experiment E8)
+- **More cores (25% of the subset, one laptop, local files):** speedup 1.69, 2.92 and 3.47 on 2, 4 and 8 cores; efficiency 84%, 73% and 43%.
+- **What limits it:** three stages take 88% to 92% of the time; the median task slows from 1.54 s to 2.44 s; the longest task at 8 cores is 19% of the run. Amdahl serial share 0.16 (a rough fit).
+- **Second machine (HDFS):** two laptops with 8 cores each, 960 s; the Intel laptop alone, 1,932 s; from 4 to 8 cores per laptop only 1.20 times faster.
+- **Data size:** [TODO: run time against 10%, 25%, 50% and 100% of the subset, E8 test C (#43)]
+- **Figure Citation:** Speedup on one laptop (`results/e8_scaling/analysis/speedup_cores.png`)
 
 ---
 
 <!-- Presenter: Md Jubayer Khan | Allocated Time: 13:30 - 14:15 -->
 ## 15. Technical Challenges & Engineering Solutions
-- **Challenge 1: Partition Memory Skew & Executor OOM**
-  - *Fix:* Integrated `size_limit(1000)` policy upstream before distributed shuffle boundaries.
-- **Challenge 2: Garbage Collection Overhead in PySpark**
-  - *Fix:* [TODO: describe the real fix and its measurement from the E8 runs (#32)]
+- **Challenge 1: Very large buckets**
+  - *Answer:* `size_limit(1000)` counts bucket sizes (one shuffle), then drops oversized buckets before pairs are built, which limits the work and memory of any one task. It does not log what it drops.
+- **Challenge 2: A software update during a long run**
+  - *Answer:* an automatic update replaced Java while a job ran; we restarted the Spark services and ran that test again (`docs/e8_runbook.md`).
 - **Challenge 3: Directional Duplicate Ground Truth**
   - *Fix:* Each link is oriented by the `created` timestamp of its two questions (newer is `dup_id`), not by id order; links with equal timestamps are dropped.
-- **Figure Citation:** TODO (not yet produced): Memory and GC profile (`results/e8_scaling/executor_gc.csv`)
 
 ---
 
 <!-- Presenter: All Members | Allocated Time: 14:15 - 15:00 -->
 ## 16. Summary, Impact & Q&A Readiness
 - **Core Results:**
-  - [TODO: run time of the full python subset, from #31]
-  - [TODO: Recall@10 and reduction ratio of the full run, #31]. On Super User with `b=32, r=4` we measured Recall@10 = 11.5% and reduction ratio 0.998 (`results/e3_lsh_real/`).
+  - Full python subset: shingles and signatures 1,065 s; candidates and evaluation 3,571 s (`results/core_pipeline_summary.md`).
+  - Recall@10 3.8%, reduction ratio 99.97% (`results/metrics.csv`); 71.3% of labelled pairs have title similarity under 0.2 (`results/error_analysis/README.md`).
 - **Course Concepts Mastered:** Locality-Sensitive Hashing, MinHash, Universal Hash Families, S-Curves, MapReduce Partitioning, RDD Optimization, Distributed Scalability.
 - **Reproducibility:** Fully automated via frozen JSON configs and clean CLI entry points.
 - **Ready for Defense & Q&A!**

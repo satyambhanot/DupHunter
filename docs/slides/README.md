@@ -51,20 +51,20 @@ cited without `TODO` exists.
 
 | Slide | Stated Metric / Plot | Artifact Source |
 |---|---|---|
-| 1 | $N(N-1)/2$ for $N = 2.2$ M, 7.7 years at 10,000 comparisons/s | arithmetic; TODO question count (#31) |
-| 3 | Super User 516,669 questions, 13,325 labelled duplicates (2.6%); questions per year | `results/dataset_stats.md`, `results/dataset/questions_per_year.png` |
+| 1 | 24,133,975 questions; $N(N-1)/2$ for $N = 2{,}204{,}200$; 7.7 years at 10,000 comparisons/s | `results/dataset_stats.md`; arithmetic |
+| 3 | Super User 13,325 duplicate questions of 516,669 (2.6%, counted from its answer key); 102,878 python pairs; questions per year | `results/dataset_stats.md`, `results/e7_buckets/bucket_comparison.csv`, `results/dataset/questions_per_year.png` |
 | 4 | Metric definitions (Recall@K, MAP, NDCG, reduction ratio) | `src/evaluation/README.md` |
 | 6 | E1: 14 options; AUC 0.957 best; title words 35.2% at $J \ge 0.2$, 9.6 shingles | `results/e1_representation/options.csv`, `results/e1_representation/best_options_histograms.png` |
 | 7 | E2: spread 0.049 at $n=128$ (theory 0.044); 5.1 MB for 5,000 signatures | `results/e2_signature/accuracy.csv`, `results/e2_signature/cost.csv`, `results/e2_signature/accuracy.png` |
 | 8 | E3: trade-off of three $(b, r)$ settings; measured vs. predicted S-curves | `results/e3_lsh_real/tradeoff.csv`, `results/e3_lsh_real/s_curves.png` |
-| 9 | E7 bucket strategies | TODO `results/e7_buckets/` (#30) |
-| 10 | E6 tag blocking | TODO `results/e6_blocking/` (#17); itemsets are in `results/e6_blocking/frequent_tagsets.csv` |
-| 11 | E4: top-1 agreement 82.3%, mean rank shift 0.94; Recall and NDCG of rankers | `results/e4_verification/ranking_comparison.csv`; Recall, MAP, NDCG TODO (#75) |
-| 12 | Node A/B specifications | `docs/team/jubayerkhan.md`, `docs/team/NavjotSinghShienh.md`, `configs/cluster/` |
-| 13 | E5 baselines | TODO `results/e5_baselines/` (#10, #11) |
-| 14 | E8 scaling | TODO `results/e8_scaling/` (#32, #43) |
-| 15 | Engineering lessons | TODO from the E8 runs (#32) |
-| 16 | Full run on the python subset | TODO (#31) |
+| 9 | E7 bucket profile and strategy comparison | `results/e7_buckets/bucket_profile.csv`, `results/e7_buckets/bucket_comparison.csv` |
+| 10 | E6 tag blocking | `results/e6_blocking/blocking_comparison.csv` |
+| 11 | E4: agreement and rank shift; Recall of the rankers | `results/e4_verification/ranking_comparison.csv`, `results/e4_verification/tfidf_comparison.csv` |
+| 12 | Node roles, core-run resources, software | `results/core_pipeline_summary.md` |
+| 13 | E5 exact search and shared sample | `results/e5_baselines/runs.csv`, `results/e5_baselines/shared_sample.csv` |
+| 14 | E8 cores and second machine. Data size: TODO (#43) | `results/e8_scaling/analysis/summary.csv`, `results/e8_scaling/analysis/README.md` |
+| 15 | Engineering lessons | `docs/e8_runbook.md`, `src/similarity/lsh.py` |
+| 16 | Full run on the python subset | `results/core_pipeline_summary.md`, `results/metrics.csv`, `results/error_analysis/README.md` |
 
 ---
 
@@ -79,10 +79,10 @@ Answers use only measured results; the open ones are marked.
 - **Defense:** The mean difference is 1 to 3 points per setting, up to 10 points in single bins of 40 to 85 pairs, so part of it is sampling error. The measured rate is lower than predicted above Jaccard 0.4. One explanation is that the prediction is taken at the bin middle while the pairs lie nearer the lower end; we did not test other causes (for example the hash family).
 
 ### Q3: Why drop big buckets instead of splitting or salting them?
-- **Defense:** TODO: answer with the E7 result (#30). What is measured: E3 used a bucket limit of 1,000; the effect of that limit on recall has not been measured yet.
+- **Defense:** Without a limit, 659 buckets hold 89.9% of all bucket pairs (`results/e7_buckets/bucket_profile.csv`). Splitting keeps every pair, so the total pair work does not shrink (it grows by about a third with 3 chunks, `src/verification/README.md`); what it can lower is the slowest task. We implemented and tested it but did not run it at full size, so we make no claim about its speed. The recall lost only to the limit is not measured.
 
 ### Q4: Why does the speedup level off with more cores or nodes?
-- **Defense:** TODO: answer with the E8 Amdahl fit (#32). Hypothesis to test: LSH grouping needs a shuffle, shingling and MinHash do not.
+- **Defense:** On one laptop the speedup is 3.47 on 8 cores. An Amdahl fit gives a serial share of 0.16 but fits roughly, so it summarises all overheads. The median task slows from 1.54 s to 2.44 s, which suggests competition for a shared resource that we did not identify, and the longest task alone is 19% of the 8-core run (`results/e8_scaling/analysis/README.md`).
 
 ### Q5: Why is Precision@K a "lower bound"?
 - **Defense:** The answer key holds only duplicates that moderators linked. A candidate that is not in the key may still be a true duplicate nobody linked, so the measured precision is at most the true precision.
