@@ -68,7 +68,7 @@ Notes: Say the lower bound out loud; it is the first question a grader asks abou
 
 - Metrics: Recall@1, @5, @10, Precision@10, MAP, NDCG@10 and the reduction ratio.
 - Baselines: exact search timed on 10,000 and 50,000 questions; exact, our LSH and Spark on 9,650.
-- Every run adds one row to results/metrics.csv with its settings; settings live in configs/.
+- Pipeline runs record metrics with their settings (core runs: results/metrics.csv); configs/ holds settings.
 - Cluster: two laptops (Intel i7-13650HX and AMD Ryzen 7 5800H, 16 GB each), Spark 3.5.3, HDFS.
 
 Figure: —
