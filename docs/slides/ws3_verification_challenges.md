@@ -46,4 +46,5 @@
 - **Spark Windows / Cluster Interop:** Resolved Java 17 / `PYSPARK_PYTHON` / cross-machine networking constraints for the 2-laptop cluster.
 - **Skew vs. Recall Trade-off:** Dropping oversized buckets protects tail latency but loses duplicates; `drop_common_shingles` avoids huge buckets while preserving recall.
 - **Scope & Checkpoint Cuts:**
-  - Streaming, AI-impact experiments, and the full-scale `salt_split` run (`#41`; code done and tested) were cut to prioritize core E6/E7 cluster runs (`#17`, `#30`); E4 TF-IDF re-ranking (`#40`) was completed.
+  - The full-scale `salt_split` run (`#41`; code done and tested) was cut to prioritize core E6/E7 cluster runs (`#17`, `#30`); E4 TF-IDF re-ranking (`#40`) was completed.
+  - The AI-impact study and the streaming check were dropped earlier, in the proposal revision.

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.check_report import (
     extract_bib_keys,
     extract_citations,
@@ -11,6 +13,7 @@ from scripts.check_report import (
     find_missing_citations,
     find_missing_inputs,
     find_unsourced_numbers,
+    parse_args,
     run_checks,
 )
 
@@ -148,3 +151,10 @@ class TestRepoReportFiles:
             root / "docs" / "report" / "refs.bib",
         )
         assert ok, f"Expected repo report checks to pass, got: {messages}"
+
+
+def test_help_prints_the_comment_tags(capsys):
+    with pytest.raises(SystemExit) as stop:
+        parse_args(["--help"])
+    assert stop.value.code == 0
+    assert "% source:" in " ".join(capsys.readouterr().out.split())
