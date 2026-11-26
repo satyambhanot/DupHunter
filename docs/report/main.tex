@@ -22,7 +22,7 @@ looks for the earlier question using shingles, MinHash signatures and banded loc
 hashing (LSH), written by us, and we study exact re-ranking, very large buckets and tag blocking with
 SON. On the 2,204,200 \texttt{python} questions, using title words with 32 bands of 4 rows, it
 % source: results/e7_buckets/bucket_profile.csv; configs/full_run.json
-compares only 0.03\% of all question pairs and reaches a Recall@10 of 3.8\% against the duplicates
+keeps only 0.03\% of all question pairs as candidates and reaches a Recall@10 of 3.8\% against the duplicates
 % source: results/metrics.csv
 that moderators labelled. The main limit is the text: 71.3\% of labelled pairs have a title
 similarity below 0.2. On one laptop, 8 cores ran the pipeline on a quarter of the questions 3.47
