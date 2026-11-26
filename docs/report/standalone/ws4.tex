@@ -1,0 +1,19 @@
+% Builds the WS4 report fragment on its own, to check its length and that it compiles.
+% From the repository root:  cd docs/report/standalone && tectonic ws4.tex
+% (the citation key shows as undefined here; the full report has the bibliography)
+\documentclass[11pt,twocolumn]{article}
+\usepackage{amsmath,amssymb,booktabs,cite,graphicx,hyperref}
+\graphicspath{{../../../}}
+\input{../ws4_system_scaling}
+\begin{document}
+\section{System and Cluster Design}
+\wsfourSystem
+\section{Results}
+\wsfourResults
+\section{Analysis}
+\wsfourAnalysis
+\section{Limitations, Scope Changes, and Conclusion}
+\wsfourConclusion
+\section{Individual Contributions}
+\wsfourContribution
+\end{document}

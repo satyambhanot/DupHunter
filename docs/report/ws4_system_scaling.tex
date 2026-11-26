@@ -1,0 +1,155 @@
+% WS4 report fragment (issue #42): system and cluster design (Section 6), the core run and the E5
+% results and analysis (Sections 8 and 9), limitations, scope changes and conclusion (Section 10) and
+% the WS4 contribution (Section 11). No preamble; docs/report/main.tex pulls it in with \input.
+% Every number carries a "% source:" comment; "% TODO" marks a result that does not exist yet.
+% Run time against cores and the second machine (E8) is reported in the WS1 fragment, not repeated here.
+% Check its length alone with: cd docs/report/standalone && tectonic ws4.tex
+
+\newcommand{\wsfourSystem}{%
+\paragraph{Data flow.} The Stack Overflow archive is read as a stream and never unpacked; the ETL
+writes posts without text, question text (\texttt{python} questions only) and post links as Parquet,
+partitioned by year. The pipeline then runs in Spark~\cite{zaharia2016spark} as four stages:
+shingles from question titles, MinHash signatures, LSH candidate pairs, and evaluation against the
+answer key. Each stage writes its output to HDFS, so a later stage can be repeated without the
+earlier ones. Evaluation appends one row of metrics per run and writes a table with one row per
+labelled pair for the error analysis.
+% source: src/etl/README.md; scripts/cluster/stages.py; docs/CONTRACTS.md
+
+\paragraph{Cluster.} Two laptops with 16~GB of memory each form a Spark 3.5.3 standalone cluster
+with Hadoop 3.3.6, joined by a wired Gigabit link. Laptop~A (Intel i7-13650HX) runs the Spark
+master, the HDFS NameNode, a worker and a DataNode; Laptop~B (AMD Ryzen~7 5800H) runs a worker and a
+DataNode. HDFS keeps two copies of each block. In the full core run Laptop~A gave 8 cores and 8~GB
+to its worker and Laptop~B 4 cores and 5~GB, with 4~GB per executor and 200 shuffle partitions.
+% source: results/core_pipeline_summary.md
+The scaling runs changed the number of cores as described with their results.
+% source: docs/e8_runbook.md
+
+\paragraph{Operation.} Cluster configuration files are generated from templates for each laptop, and
+scripts start, stop, check and smoke-test the services. Spark event logs go to HDFS and are the
+source of run times, stage times, shuffle volume and task times. Pipeline settings are in one JSON
+file, and seeds are fixed.
+% source: docs/cluster_setup.md; configs/full_run.json
+}
+
+\newcommand{\wsfourResults}{%
+\subsection{Core Run and Baselines (E5)}
+\paragraph{Core run.} Table~\ref{tab:ws4-core} gives both LSH settings on 10\% and 100\% of the
+\texttt{python} subset. At full size, building shingles and signatures took 1,065~s and wrote
+18.1~GB of shuffle data; candidate generation and evaluation with the chosen setting ($b=32$, $r=4$)
+took 3,571~s and wrote 105.6~GB, with at most 976~MB of execution memory in one task.
+% source: results/core_pipeline_summary.md
+
+\begin{table}[h]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \caption{Core runs. Each size is scored on the labelled pairs inside it.}
+  \label{tab:ws4-core}
+  \begin{tabular}{@{}llrrr@{}}
+    \toprule
+    Data & $b$, $r$ & Candidates & Recall@10 & MAP \\
+    \midrule
+    10\% & 16, 8 & 121,120 & 0.008 & 0.007 \\ % source: results/metrics.csv
+    10\% & 32, 4 & 27,186,575 & 0.064 & 0.042 \\ % source: results/metrics.csv
+    100\% & 16, 8 & 11,725,463 & 0.012 & 0.009 \\ % source: results/metrics.csv
+    100\% & 32, 4 & 740,022,352 & 0.038 & 0.023 \\ % source: results/metrics.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Exact search.} Two exact all-pairs implementations (an inverted-index join and a direct
+Spark join) returned the same pairs with Jaccard at least 0.1 on nested Super User samples:
+4,883,441 pairs for 10,000 questions and 98,759,691 for 50,000. In the recorded runs the direct join
+was slower at 10,000 (40~s against 33~s) and faster at 50,000 (355~s against 449~s). Those timings
+include counting and writing an uncached result on Windows, so they show only rough cost.
+% source: results/e5_baselines/runs.csv; results/e5_baselines/README.md
+
+\paragraph{Shared sample.} Table~\ref{tab:ws4-shared} runs exact search, our LSH and Spark's
+\texttt{MinHashLSH} on the same 9,650 Super User questions with 2,139 labelled pairs. Run times are
+left out: two runs of the same command differed by up to 4.6 times.
+% source: results/e5_baselines/ours_vs_spark.md
+
+\begin{table}[h]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \caption{One shared Super User sample. The last two columns are the share of exact pairs with at
+  least that similarity that the method also returns.}
+  \label{tab:ws4-shared}
+  \begin{tabular}{@{}lrrrr@{}}
+    \toprule
+    Method & Candidates & R@10 & $J\ge0.4$ & $J\ge0.6$ \\
+    \midrule
+    Exact, $J\ge0.1$ & 3,671,388 & 0.351 & 100\% & 100\% \\ % source: results/e5_baselines/shared_sample.csv
+    Ours, 64, 2 & 3,660,207 & 0.338 & 100\% & 100\% \\ % source: results/e5_baselines/shared_sample.csv
+    Ours, 32, 4 & 78,091 & 0.116 & 69\% & 100\% \\ % source: results/e5_baselines/shared_sample.csv
+    Ours, 16, 8 & 146 & 0.024 & 5\% & 62\% \\ % source: results/e5_baselines/shared_sample.csv
+    Spark, 5 tables & 99 & 0.024 & 5\% & 100\% \\ % source: results/e5_baselines/shared_sample.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+}
+
+\newcommand{\wsfourAnalysis}{%
+\subsection{What the Baselines and the Cluster Show}
+\paragraph{Against exact search.} Exact search is itself limited: it reaches Recall@10 0.351, and
+only 68.5\% of the labelled pairs share enough title words to pass $J\ge0.1$. With $b=32$, $r=4$ our
+LSH returns 47 times fewer candidates and reaches about a third of that recall; $b=64$, $r=2$ comes
+close to it but removes almost no candidates. Spark's hash tables are combined with OR only, and its
+join then keeps only the pairs inside a distance cutoff, here $J\ge0.6$. Its low recall therefore comes
+mainly from the cutoff, and the comparison does not show that either LSH is better at equal settings.
+% source: results/e5_baselines/ours_vs_spark.md
+
+\paragraph{Reading the core runs.} Recall@10 is higher on 10\% (0.064) than on all of the subset
+(0.038). The two rows are scored on different labelled pairs, and at full size each pair competes
+with more candidates for ten places while more buckets pass the size limit. We did not separate
+these effects.
+% source: results/metrics.csv
+
+\paragraph{Running on two laptops.} Run times on more cores and on the second machine are analysed
+with the speedup results. One run was lost when an automatic system update replaced Java during the
+job; the services were restarted and that test's runs were done again. In every setting of the speedup tests the three run times stayed within 13.8\% of their median. The effect of data size on run time and memory
+has not been measured.
+% source: docs/e8_runbook.md
+% TODO(#43): add the data-size results, or state that the test was not run.
+}
+
+\newcommand{\wsfourConclusion}{%
+\paragraph{Limitations.} Shingles come from titles only, and most labelled duplicates share few title
+words. The duplicate labels are incomplete. Full-scale results cover only \texttt{python} questions,
+each full-size run time comes from a single run, and the baseline comparison uses Super User. The recall lost
+only to the bucket size limit was not measured.
+
+\paragraph{Scope changes.} Our first proposal also covered tag experts (PageRank), stream counting
+and the effect of AI tools on Stack Overflow. We dropped these to study one problem in depth, and
+kept SON as a secondary question about blocking. Splitting big buckets was implemented but not run at
+full size. The exact search was not run on 100,000 questions.
+% source: docs/proposal/ENSF612_Project_Proposal.tex; docs/proposal/ENSF612_Project_Proposal_v3.tex
+% TODO(#43): state what happened to the data-size test and the run on all of Stack Overflow.
+
+\paragraph{Conclusion.} \emph{Accuracy:} on the full \texttt{python} subset our chosen setting
+reaches Recall@10 3.8\% while ruling out 99.97\% of all pairs; on the Super User sample it reaches
+about a third of exact search's recall.
+% source: results/metrics.csv; results/e5_baselines/shared_sample.csv
+\emph{Theory:} the spread of our MinHash estimates is within about 10\% of the formula, and measured
+LSH curves differ from the theory by 1 to 3 points on average (Super User).
+% source: results/e2_signature/README.md; results/e3_lsh_real/README.md
+\emph{Scale:} without a limit, 659 of 46.4 million buckets would hold 89.9\% of all bucket pairs;
+on a quarter of the subset, 8 cores on one laptop gave a speedup of 3.47, and two laptops reading HDFS were 2.01 times as fast as
+the Intel laptop alone. How run time grows with data size is still open.
+% source: results/e7_buckets/bucket_profile.csv; results/e8_scaling/analysis/README.md
+\emph{Blocking:} SON groups cut candidates by 60\% but run time by only 8\%, and Recall@10 fell from
+0.038 to 0.027, because 54\% of labelled pairs fall into different groups.
+% source: results/e6_blocking/blocking_comparison.csv
+The main obstacle is the text: with title words even exact search over all pairs with $J\ge0.1$ stops at Recall@10 0.351 on the
+Super User sample, so much better recall needs text in which duplicates overlap more, which we have
+not tested at full size.
+}
+
+\newcommand{\wsfourContribution}{%
+\paragraph{Md Jubayer Khan (WS4: Cluster, Baselines and Scale).} Set up the Spark and HDFS cluster
+on Laptop~A with its runbook; added the archive check and the full data-loading wrapper for Stack
+Overflow; implemented the exact all-pairs baseline and the Spark \texttt{MinHashLSH} baseline (E5);
+recorded the full core pipeline run; and produced the Stack Overflow dataset profile.
+% TODO(team): Md Jubayer Khan to confirm this paragraph.
+}
