@@ -13,7 +13,7 @@ repository shows them; the others are marked *not decided*.
 | [x] | E2, signature length | [e2_signature](../results/e2_signature/README.md), Super User |
 | [ ] | E3, LSH settings | Done on Super User: [e3_lsh_real](../results/e3_lsh_real/README.md). **Open:** the python sample that #13 also asks for |
 | [x] | E4 core, ranking of candidates | [e4_verification](../results/e4_verification/README.md) |
-| [x] | Metrics | [src/evaluation](../src/evaluation/README.md); one row per run in [metrics.csv](../results/metrics.csv) |
+| [x] | Metrics | [src/evaluation](../src/evaluation/README.md); the four core runs are in [metrics.csv](../results/metrics.csv) |
 | [x] | Spark baseline | [ours_vs_spark.md](../results/e5_baselines/ours_vs_spark.md), one shared Super User sample (#11) |
 | [x] | Cluster documentation | [cluster_setup.md](cluster_setup.md), [cluster_laptop_b.md](cluster_laptop_b.md), [e8_runbook.md](e8_runbook.md) |
 
