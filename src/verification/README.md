@@ -12,18 +12,21 @@
 
 **Our code vs. libraries:** all our own code (exact Jaccard and TF-IDF cosine re-ranking), built on Spark DataFrames.
 
+The recorded results in `results/e4_verification/` and `results/e7_buckets/` came from particular inputs
+(see their READMEs), so the examples below write to `data/` and do not replace them.
+
 ## Using E4 Verification (#29)
 
 ```bash
 python -m src.verification.verify --input data/candidates --shingles data/shingles \
-    --output results/e4_verification/ranking_comparison.csv --method both --master local[*]
+    --output data/e4/ranking_comparison.csv --method both --master local[*]
 ```
 
 ## Using E7 Big-Bucket Comparison (#30)
 
 ```bash
 python -m src.verification.buckets --posts data/posts --answer-key data/answer_key \
-    --output results/e7_buckets/bucket_comparison.csv --master local[*]
+    --output data/e7/bucket_comparison.csv --master local[*]
 ```
 
 The defaults are the project settings from E1 to E3: word 1-grams of the title (`--fields title`,
@@ -41,7 +44,7 @@ and are merged in when the full run (#31) is done.
 ```bash
 python -m src.verification.rerank --input <candidates_parquet> --shingles <shingles_parquet> \
     --posts <posts_text_parquet> --answer-key <answer_key_parquet> \
-    --output results/e4_verification/tfidf_comparison.csv --master local[*]
+    --output data/e4/tfidf_comparison.csv --master local[*]
 ```
 
 Scale note: `_compute_idf_spark` computes document frequencies in Spark (default `min_df=2`), while the top-50 candidate pool per query is collected to the driver and sorted in Python. Run TF-IDF re-ranking on a sample or on queries with labelled duplicates rather than millions of unlabelled queries.

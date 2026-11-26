@@ -15,7 +15,7 @@ Every script takes its **input paths, output paths, and Spark master as argument
 
 ## Spark in local mode on a modest laptop
 
-- Use at most half of your RAM: `--driver-memory 3g` on an 8 GB laptop, `6g` on 16 GB.
+- Use at most half of your RAM: `--driver-memory 3g` on an 8 GB laptop, `6g` on 16 GB. For the `python -m ...` commands, set it with `export PYSPARK_SUBMIT_ARGS="--driver-memory 3g pyspark-shell"`; with Spark's default the evaluation of all of Super User runs out of memory.
 - `spark.sql.shuffle.partitions=16` (the default 200 is too many for small data).
 - Read and write Parquet. Use built-in Spark functions; avoid Python UDFs (slow). Use `mapPartitions` with NumPy for heavy loops.
 - If you run out of memory: test on the first N questions (`.limit(N)`), process fewer bands per pass in LSH, or use a smaller sample.

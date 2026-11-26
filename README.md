@@ -82,7 +82,17 @@ pytest                                 # unit tests; they start a small local Sp
 ## Reproducing the results
 
 Every script takes its input, output and Spark master as arguments (see [docs/dev_setup.md](docs/dev_setup.md)),
-and the settings of every experiment are in `configs/`. The stages, in order:
+and the settings of every experiment are in `configs/`. The commands below run Super User on a laptop. Give Spark
+more memory than its default first, or the evaluation of the full site runs out of it:
+
+```bash
+export PYSPARK_SUBMIT_ARGS="--driver-memory 3g pyspark-shell"   # 8 GB laptop; 6g on 16 GB
+```
+
+**Keep your own runs out of `results/`.** `results/metrics.csv`, `results/error_analysis/` and the other files
+there hold the project's recorded results, so the commands below write to `data/`, which git ignores.
+
+The stages, in order:
 
 1. **ETL.** Stream the archive into Parquet, one pass per table (needs `7z`: `brew install p7zip` or
    `apt install p7zip-full`), then the dataset profile, the answer key and the small exports:
@@ -95,17 +105,23 @@ and the settings of every experiment are in `configs/`. The stages, in order:
        --output data/exports/superuser --tag ""
    ```
    Details and the results of the Super User run are in [src/etl/README.md](src/etl/README.md).
-2. **Similarity.** Shingles, MinHash signatures and LSH candidates:
-   `python -m src.similarity.lsh --input data/parquet/signatures --output data/parquet/candidates -b 16 -r 8`
-   Shingles and MinHash are Python functions (`build_shingles`, `build_signatures`, see
-   [src/similarity/README.md](src/similarity/README.md)) without a command line yet, so until WS2 adds one the
-   signatures Parquet is written from Python; LSH then reads it as above.
-3. **Evaluation.** Candidates against the answer key (one row per run in `results/metrics.csv`, plus the per-pair
-   table), then the error analysis:
+2. **Similarity.** Shingles (title words, the project's setting), MinHash signatures and LSH candidates:
+   ```bash
+   python -m src.similarity.shingles --posts data/parquet/superuser/posts_text --out data/parquet/shingles \
+       --representation word --k 1 --fields title
+   python -m src.similarity.minhash --shingles data/parquet/shingles --out data/parquet/signatures \
+       --n 128 --seed 42 --created-from data/parquet/superuser/posts_text
+   python -m src.similarity.lsh --input data/parquet/signatures --output data/parquet/candidates -b 16 -r 8
+   ```
+   See [src/similarity/README.md](src/similarity/README.md).
+3. **Evaluation.** Candidates against the answer key (one metrics row per run, plus the per-pair table), then the
+   error analysis. `--posts-text` and `--shingles` fill the tags, body length and exact similarity; without them
+   the error analysis skips those three breakdowns.
    ```bash
    python -m src.evaluation.evaluate --candidates data/parquet/candidates --answer-key data/answer_key/superuser \
-       --experiment E3 --settings '{"b": 16, "r": 8}' --n-questions 516669 --per-pair-out data/per_pair
-   python -m src.evaluation.errors --per-pair data/per_pair --out results/error_analysis --bands 16 --rows 8
+       --out data/metrics.csv --experiment E3 --settings '{"b": 16, "r": 8}' --n-questions 516669 \
+       --per-pair-out data/per_pair --posts-text data/parquet/superuser/posts_text --shingles data/parquet/shingles
+   python -m src.evaluation.errors --per-pair data/per_pair --out data/error_analysis --bands 16 --rows 8
    ```
    See [src/evaluation/README.md](src/evaluation/README.md).
 4. **Scaling.** Run on the cluster by the cluster owners with `python -m src.scaling.run_scaling --test A --dry-run`

@@ -5,18 +5,21 @@
 | `metrics.py` | Satyam | Pure ranking metrics (Recall@K, Precision@K, MAP, NDCG, reduction ratio) and the `METRICS` registry | #12 |
 | `evaluate.py` | Satyam | Spark glue and command line: candidates + answer key to one metrics row and the per-pair table | #12 |
 | `errors.py` | Satyam | Recall broken down by similarity, tag, question length, and year | #33 |
-| `exact.py` | Jubayer | Exact all-pairs Jaccard on the sample | #10 |
-| `spark_baseline.py` | Jubayer | Spark's built-in `MinHashLSH` on the same data | #11 |
 
-**Our code vs. libraries:** `spark_baseline.py` wraps Spark MLlib; everything else is our own code.
+The exact search and the Spark `MinHashLSH` baseline are in [src/baselines](../baselines/README.md).
+
+**Our code vs. libraries:** all our own code, on Spark DataFrames, pandas and matplotlib.
 
 ## Using it
 
 ```bash
 python -m src.evaluation.evaluate --candidates data/candidates --answer-key data/answer_key \
-    --out results/metrics.csv --experiment E3 --settings '{"b": 32, "r": 4}' --n-questions 517000 \
-    --per-pair-out results/e3_lsh/per_pair --posts-text data/parquet/superuser/posts_text
+    --out data/metrics.csv --experiment E3 --settings '{"b": 32, "r": 4}' --n-questions 517000 \
+    --per-pair-out data/per_pair --posts-text data/parquet/superuser/posts_text --shingles data/shingles
 ```
+
+`results/metrics.csv` is the default of `--out` and holds the project's core runs: pass another file for your
+own runs.
 
 - **Inputs:** candidates in contract C4 `(dup_id, cand_id, est_sim)` or C5 `(dup_id, cand_id, rank, score,
   method)`; the answer key in C6 `(dup_id, original_id, created)`. Only the questions of the answer key are
@@ -25,7 +28,7 @@ python -m src.evaluation.evaluate --candidates data/candidates --answer-key data
   searched (the C2 or C3 file of the sample works). Only answer-key pairs with both questions inside it are
   scored, and `--n-questions` defaults to its size. Without it, every pair that has a question outside the
   sample counts as a miss and recall is too low (`restrict_answer_key` is the same step as a function).
-- **Output:** one row appended to `results/metrics.csv` (C7): `experiment, settings_json, recall@1, recall@5,
+- **Output:** one row appended to the `--out` file (C7): `experiment, settings_json, recall@1, recall@5,
   recall@10, precision@10, map, ndcg@10, reduction_ratio, n_candidates`. With `--per-pair-out` the per-pair table
   (C8) is written too, for the error analysis (#33).
 - **Precision is a lower bound.** Some true duplicates were never labelled, so every results table that shows
@@ -40,8 +43,11 @@ python -m src.evaluation.evaluate --candidates data/candidates --answer-key data
 system misses duplicates. A pair is a *hit* when its original is within the first `k` candidates (default 10).
 
 ```bash
-python -m src.evaluation.errors --per-pair data/per_pair --out results/error_analysis --bands 32 --rows 4
+python -m src.evaluation.errors --per-pair data/per_pair --out data/error_analysis --bands 32 --rows 4
 ```
+
+`results/error_analysis/` holds the analysis of the full Stack Overflow run. Write there only to regenerate it
+from that run's table (last section).
 
 It writes `recall_by_similarity`, `recall_by_tags` (top 20 tags, a pair counts once per tag),
 `recall_by_length` and `recall_by_year` as CSV and PNG, plus `misses.csv` with the first 20 misses to read by
