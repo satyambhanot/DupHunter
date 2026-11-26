@@ -14,8 +14,8 @@ and `docs/e8_runbook.md`. Speedup is on the WS1 slides.
 
 Figure: —
 
-Notes: A saved output after every stage means a later stage can be repeated alone; we used that to write
-the table for the error analysis.
+Notes: A saved output after every stage means a later stage, for example the evaluation, can be repeated
+alone.
 
 ## Full-size core run
 
