@@ -44,7 +44,7 @@ Notes: Do not rank the methods by run time: two runs of the same command differe
 ## Conclusions
 
 - With title words, even exact search misses most known duplicates.
-- MinHash and LSH behaved close to the theory on Super User.
+- Close to theory: MinHash on Super User; LSH there and on a Stack Overflow sample.
 - 8 cores: speedup 3.47; two laptops: 2.01 times as fast as the Intel laptop alone (HDFS).
 - SON blocking cut candidates by 60% but run time by 8%, and lost recall.
 - Open: run time against data size has not been measured.
