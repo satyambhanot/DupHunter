@@ -24,7 +24,7 @@ repository shows them; the others are marked *not decided*.
 | TF-IDF re-ranking | #40 | **Done** | Issue closed as completed; [tfidf_comparison.csv](../results/e4_verification/tfidf_comparison.csv) |
 | SON tag blocking | #16, #17 | **Done** | Both issues closed as completed; [e6_blocking](../results/e6_blocking/README.md) |
 | Bucket splitting at full size | #41 | **Cut** (as the WS3 report states) | The cluster time went to the core E6 and E7 runs. The code and its tests are in `src/verification/`. #41 is still open |
-| Data-size scaling (test C) | #43 | **Partly complete** (`0.1`, `0.25`, `0.5`; `1.0` stalled) | 3 runs each at `0.1`, `0.25`, `0.5` on `8+8` in [runs_data_scaling.csv](../results/e8_scaling/runs_data_scaling.csv); `1.0` stalled at `199/200` in stage 17 (`147.4 GB` disk spill under `4g` executor memory) |
+| Data-size scaling (test C) | #43 | **Done** (`0.1`, `0.25`, `0.5`, `1.0`) | 3 runs each at all four fractions on `8+8` in [runs_data_scaling.csv](../results/e8_scaling/runs_data_scaling.csv) (`1.0` run with `spark.speculation true`; see [e8_runbook.md](e8_runbook.md)) |
 | Run on all of Stack Overflow | #43 | *Not decided* | No recorded run. The proposal lists it as stretch and first to cut. (The dataset profile of all of Stack Overflow is a different job and is done) |
 
 ## To close #14
