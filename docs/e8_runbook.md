@@ -52,6 +52,8 @@ Core-count (**Test A**) and second-machine (**Test B**) scaling runs on the 25% 
 ## Dropped / Aborted Runs Log
 
 - `app-20261122044346-0000` (initial `A, 1, 0.25, run 1` on Laptop B): aborted after ~1 h (`04:43`–`05:44 UTC`) when Ubuntu unattended-upgrades updated `openjdk-17` (`17.0.21.0.3` → `17.0.21.1+2`) mid-run, causing a `jspawnhelper` version mismatch. Spark Master/Worker were restarted on `17.0.21.1+2` and all 12 Test A runs were then executed cleanly from scratch.
+- `app-20261127092017-0001` (`C, 8+8, 0.1, run 2`): took `25.3 min` (`153%` above the `10.0 min` median, failing the `25%` variance check). Replaced with `app-20261127204002-0010` (`11.8 min`, `710,307 ms`), recorded as `run 2` in `results/e8_scaling/runs_data_scaling.csv`.
+- `app-20261127124046-0009` (`C, 8+8, 1, run 1`): stalled on the final task (`199/200`, partition `43`) of stage 17 after `339.8 GB` memory spill and `147.4 GB` disk spill (`exec=1` `gcMs` and `diskSpillMB` frozen for 5+ hours); stopped and excluded from `runs_data_scaling.csv`.
 
 ## Validation
 
